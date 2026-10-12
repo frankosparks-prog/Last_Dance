@@ -1,200 +1,1211 @@
+// 'use client';
+
+// import React, { useState } from 'react';
+// import { X, Ticket, CheckCircle2, ShieldCheck, Phone, Mail, User, CreditCard } from 'lucide-react';
+// import axios from 'axios';
+
+// const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
+// export default function TicketModal({ ticketPriceKES = 500, onClose }) {
+//   const [form, setForm] = useState({
+//     name: '',
+//     email: '',
+//     phone: '',
+//     quantity: 1
+//   });
+//   const [status, setStatus] = useState({ loading: false, success: false, error: '', checkoutRequestID: '' });
+
+//   const totalAmountKES = form.quantity * ticketPriceKES;
+
+//   const handleSubmit = async (e) => {
+//     e.preventDefault();
+//     setStatus({ loading: true, success: false, error: '', checkoutRequestID: '' });
+
+//     try {
+//       const res = await axios.post(`${API_BASE_URL}/last-dance/buy-ticket`, form);
+//       if (res.data.success) {
+//         const checkoutReqID = res.data.checkoutRequestID;
+//         setStatus({
+//           loading: false,
+//           success: true,
+//           error: '',
+//           checkoutRequestID: checkoutReqID
+//         });
+
+//         // Simulation fallback in test mode
+//         try {
+//           await axios.post(`${API_BASE_URL}/last-dance/test-simulate-payment`, { checkoutRequestID: checkoutReqID });
+//         } catch (simErr) {
+//           // Simulation optional
+//         }
+//       } else {
+//         setStatus({ loading: false, success: false, error: res.data.message || 'Payment initiation failed.' });
+//       }
+//     } catch (err) {
+//       setStatus({
+//         loading: false,
+//         success: false,
+//         error: err.response?.data?.message || 'M-Pesa STK push failed to trigger.'
+//       });
+//     }
+//   };
+
+//   return (
+//     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto font-sans">
+//       <div className="relative bg-white border border-slate-200 p-6 sm:p-8 rounded-3xl w-full max-w-md text-slate-900 shadow-2xl my-auto">
+        
+//         {/* Close Button */}
+//         <button
+//           onClick={onClose}
+//           className="absolute top-5 right-5 p-2 rounded-full bg-slate-100 text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition"
+//         >
+//           <X className="w-4 h-4" />
+//         </button>
+
+//         {/* Modal Header */}
+//         <div className="text-center mb-6">
+//           <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center mx-auto mb-3">
+//             <Ticket className="w-6 h-6" />
+//           </div>
+//           <h3 className="text-xl font-bold tracking-tight text-slate-900">Event Entry Pass</h3>
+//           <p className="text-xs text-slate-500 font-medium mt-0.5">Graduation Eve Send-Off | October 26th</p>
+//         </div>
+
+//         {status.success ? (
+//           <div className="text-center py-6 space-y-4">
+//             <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto animate-bounce" />
+//             <h4 className="text-lg font-bold text-slate-900">M-Pesa Payment Triggered</h4>
+//             <p className="text-xs text-slate-600 leading-relaxed max-w-xs mx-auto">
+//               Please enter your PIN on your phone to confirm payment of <strong>KES {totalAmountKES.toLocaleString()}</strong>.
+//             </p>
+//             <p className="text-[11px] text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200">
+//               🎟️ Digital QR tickets will be dispatched to <strong>{form.email}</strong> upon confirmation.
+//             </p>
+//             <button
+//               onClick={onClose}
+//               className="w-full py-3 rounded-xl bg-slate-900 text-white font-bold text-xs uppercase tracking-wider hover:bg-slate-800 transition"
+//             >
+//               Done / Close
+//             </button>
+//           </div>
+//         ) : (
+//           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+//             {status.error && (
+//               <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 font-bold">
+//                 {status.error}
+//               </div>
+//             )}
+
+//             {/* Quantity Stepper */}
+//             <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl flex items-center justify-between">
+//               <div>
+//                 <div className="font-bold text-slate-900 text-xs">Ticket Quantity</div>
+//                 <div className="text-[11px] text-slate-500 font-medium">KES {ticketPriceKES.toLocaleString()} per ticket</div>
+//               </div>
+//               <div className="flex items-center space-x-2 bg-white border border-slate-200 rounded-xl p-1 shadow-xs">
+//                 <button
+//                   type="button"
+//                   onClick={() => setForm(prev => ({ ...prev, quantity: Math.max(1, prev.quantity - 1) }))}
+//                   className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-base flex items-center justify-center transition"
+//                 >
+//                   -
+//                 </button>
+//                 <span className="font-bold text-slate-900 text-sm px-2">{form.quantity}</span>
+//                 <button
+//                   type="button"
+//                   onClick={() => setForm(prev => ({ ...prev, quantity: prev.quantity + 1 }))}
+//                   className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-base flex items-center justify-center transition"
+//                 >
+//                   +
+//                 </button>
+//               </div>
+//             </div>
+
+//             {/* Full Name */}
+//             <div>
+//               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Full Name</label>
+//               <div className="relative">
+//                 <input
+//                   type="text"
+//                   required
+//                   placeholder="John Doe"
+//                   value={form.name}
+//                   onChange={(e) => setForm({ ...form, name: e.target.value })}
+//                   className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-slate-900 transition"
+//                 />
+//                 <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+//               </div>
+//             </div>
+
+//             {/* Email Address */}
+//             <div>
+//               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+//                 Email Address (For QR Delivery)
+//               </label>
+//               <div className="relative">
+//                 <input
+//                   type="email"
+//                   required
+//                   placeholder="john@example.com"
+//                   value={form.email}
+//                   onChange={(e) => setForm({ ...form, email: e.target.value })}
+//                   className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-slate-900 transition"
+//                 />
+//                 <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+//               </div>
+//             </div>
+
+//             {/* M-Pesa Phone */}
+//             <div>
+//               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+//                 M-Pesa Phone Number
+//               </label>
+//               <div className="relative">
+//                 <input
+//                   type="tel"
+//                   required
+//                   placeholder="0712345678"
+//                   value={form.phone}
+//                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
+//                   className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-slate-900 transition"
+//                 />
+//                 <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+//               </div>
+//             </div>
+
+//             {/* Total Price & Submit */}
+//             <div className="pt-3 border-t border-slate-100 space-y-3">
+//               <div className="flex justify-between items-center text-xs font-bold text-slate-900">
+//                 <span>Total Amount:</span>
+//                 <span className="text-rose-600 text-base font-extrabold">KES {totalAmountKES.toLocaleString()}</span>
+//               </div>
+
+//               <button
+//                 type="submit"
+//                 disabled={status.loading}
+//                 className="w-full py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider shadow-xs transition disabled:opacity-50 flex items-center justify-center gap-2"
+//               >
+//                 <CreditCard className="w-4 h-4" />
+//                 {status.loading ? 'Initiating M-Pesa Payment...' : `Purchase Ticket(s) (KES ${totalAmountKES.toLocaleString()})`}
+//               </button>
+
+//               <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-500 font-medium">
+//                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Instant M-Pesa Daraja Checkout
+//               </div>
+//             </div>
+//           </form>
+//         )}
+//       </div>
+//     </div>
+//   );
+// }
+
+
+
+
+
+
+
 'use client';
 
-import React, { useState } from 'react';
-import { X, Ticket, CheckCircle2, ShieldCheck, Phone, Mail, User, CreditCard } from 'lucide-react';
+import React, {
+  useEffect,
+  useState,
+} from 'react';
+
+import { X } from 'lucide-react';
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://localhost:5000/api';
 
-export default function TicketModal({ ticketPriceKES = 500, onClose }) {
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    quantity: 1
-  });
-  const [status, setStatus] = useState({ loading: false, success: false, error: '', checkoutRequestID: '' });
+/* =========================================================
+   IMAGE URLS
+========================================================= */
 
-  const totalAmountKES = form.quantity * ticketPriceKES;
+const TICKET_IMAGE =
+  'https://ik.imagekit.io/rhjfaafsm/lastdanceticket3.svg';
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setStatus({ loading: true, success: false, error: '', checkoutRequestID: '' });
+const MPESA_SECURE_IMAGE =
+  'https://ik.imagekit.io/rhjfaafsm/paysecurely.svg';
 
-    try {
-      const res = await axios.post(`${API_BASE_URL}/last-dance/buy-ticket`, form);
-      if (res.data.success) {
-        const checkoutReqID = res.data.checkoutRequestID;
-        setStatus({
-          loading: false,
-          success: true,
-          error: '',
-          checkoutRequestID: checkoutReqID
-        });
+/* =========================================================
+   TICKET MODAL
+========================================================= */
 
-        // Simulation fallback in test mode
-        try {
-          await axios.post(`${API_BASE_URL}/last-dance/test-simulate-payment`, { checkoutRequestID: checkoutReqID });
-        } catch (simErr) {
-          // Simulation optional
+export default function TicketModal({
+  ticketPriceKES = 500,
+  onClose,
+}) {
+  const [form, setForm] =
+    useState({
+      name: '',
+      email: '',
+      phone: '',
+      quantity: 1,
+    });
+
+  const [status, setStatus] =
+    useState({
+      loading: false,
+      success: false,
+      error: '',
+      checkoutRequestID: '',
+    });
+
+  const totalAmountKES =
+    form.quantity *
+    ticketPriceKES;
+
+  /* =======================================================
+     LOCK BODY SCROLL
+  ======================================================= */
+
+  useEffect(() => {
+    const previousOverflow =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      'hidden';
+
+    return () => {
+      document.body.style.overflow =
+        previousOverflow;
+    };
+  }, []);
+
+  /* =======================================================
+     ESC KEY CLOSE
+  ======================================================= */
+
+  useEffect(() => {
+    const handleKeyDown =
+      (event) => {
+        if (
+          event.key === 'Escape'
+        ) {
+          onClose?.();
         }
-      } else {
-        setStatus({ loading: false, success: false, error: res.data.message || 'Payment initiation failed.' });
-      }
-    } catch (err) {
-      setStatus({
-        loading: false,
-        success: false,
-        error: err.response?.data?.message || 'M-Pesa STK push failed to trigger.'
-      });
-    }
+      };
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+    };
+  }, [onClose]);
+
+  /* =======================================================
+     FORM UPDATE
+  ======================================================= */
+
+  const updateForm = (
+    field,
+    value
+  ) => {
+    setForm((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
   };
 
+  /* =======================================================
+     PAYMENT
+  ======================================================= */
+
+  const handleSubmit =
+    async (event) => {
+      event.preventDefault();
+
+      setStatus({
+        loading: true,
+        success: false,
+        error: '',
+        checkoutRequestID: '',
+      });
+
+      try {
+        const response =
+          await axios.post(
+            `${API_BASE_URL}/last-dance/buy-ticket`,
+            form
+          );
+
+        if (
+          response.data?.success
+        ) {
+          const checkoutRequestID =
+            response.data
+              .checkoutRequestID;
+
+          setStatus({
+            loading: false,
+            success: true,
+            error: '',
+            checkoutRequestID,
+          });
+
+          /* -----------------------------------------
+             Optional test-mode simulation
+          ------------------------------------------ */
+
+          try {
+            await axios.post(
+              `${API_BASE_URL}/last-dance/test-simulate-payment`,
+              {
+                checkoutRequestID,
+              }
+            );
+          } catch (
+            simulationError
+          ) {
+            // Optional simulation.
+          }
+
+          return;
+        }
+
+        setStatus({
+          loading: false,
+          success: false,
+
+          error:
+            response.data
+              ?.message ||
+            'Payment initiation failed.',
+
+          checkoutRequestID: '',
+        });
+      } catch (error) {
+        setStatus({
+          loading: false,
+          success: false,
+
+          error:
+            error.response?.data
+              ?.message ||
+            'M-Pesa STK push failed to trigger.',
+
+          checkoutRequestID: '',
+        });
+      }
+    };
+
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto font-sans">
-      <div className="relative bg-white border border-slate-200 p-6 sm:p-8 rounded-3xl w-full max-w-md text-slate-900 shadow-2xl my-auto">
-        
-        {/* Close Button */}
+    <div
+      className="
+        fixed
+        inset-0
+        z-[9999]
+        flex
+        items-center
+        justify-center
+        overflow-y-auto
+        bg-black/65
+        p-4
+        backdrop-blur-sm
+
+        sm:p-6
+      "
+      style={{
+        fontFamily:
+          'Roboto, sans-serif',
+      }}
+      onMouseDown={(event) => {
+        if (
+          event.target ===
+          event.currentTarget
+        ) {
+          onClose?.();
+        }
+      }}
+    >
+      {/* =====================================================
+          MODAL
+      ====================================================== */}
+
+      <div
+        className="
+          relative
+          my-auto
+          w-full
+          max-w-[460px]
+          overflow-hidden
+          bg-white
+          shadow-[0_24px_70px_rgba(0,0,0,0.22)]
+        "
+      >
+        {/* ===================================================
+            CLOSE BUTTON
+        ==================================================== */}
+
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-full bg-slate-100 text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition"
+          aria-label="Close ticket purchase"
+          className="
+            absolute
+            right-3
+            top-3
+            z-30
+            flex
+            h-9
+            w-9
+            items-center
+            justify-center
+            bg-black/65
+            text-white
+            backdrop-blur-sm
+            transition-colors
+
+            hover:bg-[#762e99]
+          "
         >
-          <X className="w-4 h-4" />
+          <X
+            className="
+              h-4
+              w-4
+            "
+          />
         </button>
 
-        {/* Modal Header */}
-        <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center mx-auto mb-3">
-            <Ticket className="w-6 h-6" />
-          </div>
-          <h3 className="text-xl font-bold tracking-tight text-slate-900">Event Entry Pass</h3>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">Graduation Eve Send-Off | October 26th</p>
+        {/* ===================================================
+            TICKET SVG
+
+            Height: 125px
+            Full modal width
+            No border
+            No radius
+            No background/frame
+        ==================================================== */}
+
+        <div
+          className="
+            flex
+            h-[125px]
+            w-full
+            items-center
+            justify-center
+            overflow-hidden
+            bg-transparent
+          "
+        >
+          <img
+            src={TICKET_IMAGE}
+            alt="Last Dance ticket"
+            width={489}
+            height={184}
+            className="
+              block
+              h-full
+              w-full
+              object-contain
+              object-center
+            "
+          />
         </div>
 
-        {status.success ? (
-          <div className="text-center py-6 space-y-4">
-            <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto animate-bounce" />
-            <h4 className="text-lg font-bold text-slate-900">M-Pesa Payment Triggered</h4>
-            <p className="text-xs text-slate-600 leading-relaxed max-w-xs mx-auto">
-              Please enter your PIN on your phone to confirm payment of <strong>KES {totalAmountKES.toLocaleString()}</strong>.
-            </p>
-            <p className="text-[11px] text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200">
-              🎟️ Digital QR tickets will be dispatched to <strong>{form.email}</strong> upon confirmation.
-            </p>
-            <button
-              onClick={onClose}
-              className="w-full py-3 rounded-xl bg-slate-900 text-white font-bold text-xs uppercase tracking-wider hover:bg-slate-800 transition"
-            >
-              Done / Close
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-            {status.error && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 font-bold">
-                {status.error}
-              </div>
-            )}
+        {/* ===================================================
+            MODAL CONTENT
+        ==================================================== */}
 
-            {/* Quantity Stepper */}
-            <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl flex items-center justify-between">
-              <div>
-                <div className="font-bold text-slate-900 text-xs">Ticket Quantity</div>
-                <div className="text-[11px] text-slate-500 font-medium">KES {ticketPriceKES.toLocaleString()} per ticket</div>
+        <div
+          className="
+            px-6
+            pb-7
+            pt-6
+
+            sm:px-8
+            sm:pb-8
+          "
+        >
+          {status.success ? (
+            /* =================================================
+                SUCCESS STATE
+            ================================================= */
+
+            <div>
+              <div
+                className="
+                  flex
+                  h-12
+                  w-12
+                  items-center
+                  justify-center
+                  rounded-full
+                  bg-[#5e2590]
+                  text-[22px]
+                  font-medium
+                  text-white
+                "
+              >
+                ✓
               </div>
-              <div className="flex items-center space-x-2 bg-white border border-slate-200 rounded-xl p-1 shadow-xs">
-                <button
-                  type="button"
-                  onClick={() => setForm(prev => ({ ...prev, quantity: Math.max(1, prev.quantity - 1) }))}
-                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-base flex items-center justify-center transition"
+
+              <h3
+                className="
+                  mt-5
+                  text-[26px]
+                  font-medium
+                  leading-[1.2]
+                  tracking-[-0.02em]
+                  text-black
+                "
+              >
+                Check your phone.
+              </h3>
+
+              <p
+                className="
+                  mt-3
+                  text-[14px]
+                  font-normal
+                  leading-[1.65]
+                  text-[#242424]
+                "
+              >
+                We sent an M-Pesa
+                payment request for{' '}
+
+                <strong>
+                  KES{' '}
+                  {totalAmountKES.toLocaleString()}
+                </strong>
+
+                . Enter your M-Pesa
+                PIN to complete the
+                payment.
+              </p>
+
+              <div
+                className="
+                  mt-5
+                  border-l-2
+                  border-[#ff914d]
+                  bg-[#f7f7f7]
+                  px-4
+                  py-4
+                "
+              >
+                <p
+                  className="
+                    text-[12px]
+                    leading-[1.55]
+                    text-black/50
+                  "
                 >
-                  -
-                </button>
-                <span className="font-bold text-slate-900 text-sm px-2">{form.quantity}</span>
-                <button
-                  type="button"
-                  onClick={() => setForm(prev => ({ ...prev, quantity: prev.quantity + 1 }))}
-                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-base flex items-center justify-center transition"
+                  Your digital QR
+                  ticket will be
+                  delivered to
+                </p>
+
+                <p
+                  className="
+                    mt-1
+                    break-all
+                    text-[13px]
+                    font-medium
+                    text-black
+                  "
                 >
-                  +
-                </button>
+                  {form.email}
+                </p>
               </div>
-            </div>
 
-            {/* Full Name */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Full Name</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  required
-                  placeholder="John Doe"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-slate-900 transition"
+              {/* =========================================
+                  M-PESA SECURE LOGO
+              ========================================== */}
+
+              <div
+                className="
+                  mt-6
+                  flex
+                  items-center
+                  justify-center
+                "
+              >
+                <img
+                  src={
+                    MPESA_SECURE_IMAGE
+                  }
+                  alt="Pay securely with M-Pesa"
+                  width={489}
+                  height={184}
+                  className="
+                    h-auto
+                    w-[145px]
+                    object-contain
+
+                    sm:w-[155px]
+                  "
                 />
-                <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              </div>
-            </div>
-
-            {/* Email Address */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                Email Address (For QR Delivery)
-              </label>
-              <div className="relative">
-                <input
-                  type="email"
-                  required
-                  placeholder="john@example.com"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-slate-900 transition"
-                />
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              </div>
-            </div>
-
-            {/* M-Pesa Phone */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                M-Pesa Phone Number
-              </label>
-              <div className="relative">
-                <input
-                  type="tel"
-                  required
-                  placeholder="0712345678"
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-slate-900 transition"
-                />
-                <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              </div>
-            </div>
-
-            {/* Total Price & Submit */}
-            <div className="pt-3 border-t border-slate-100 space-y-3">
-              <div className="flex justify-between items-center text-xs font-bold text-slate-900">
-                <span>Total Amount:</span>
-                <span className="text-rose-600 text-base font-extrabold">KES {totalAmountKES.toLocaleString()}</span>
               </div>
 
               <button
-                type="submit"
-                disabled={status.loading}
-                className="w-full py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider shadow-xs transition disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <CreditCard className="w-4 h-4" />
-                {status.loading ? 'Initiating M-Pesa Payment...' : `Purchase Ticket(s) (KES ${totalAmountKES.toLocaleString()})`}
-              </button>
+                type="button"
+                onClick={onClose}
+                className="
+                  mt-6
+                  w-full
+                  rounded-full
+                  bg-gradient-to-r
+                  from-[#5e2590]
+                  to-[#762e99]
+                  px-5
+                  py-3.5
+                  text-[14px]
+                  font-medium
+                  text-white
+                  transition-all
+                  duration-200
 
-              <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-500 font-medium">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Instant M-Pesa Daraja Checkout
-              </div>
+                  hover:opacity-90
+
+                  active:scale-[0.99]
+                "
+              >
+                Done
+              </button>
             </div>
-          </form>
-        )}
+          ) : (
+            /* =================================================
+                PAYMENT FORM
+            ================================================= */
+
+            <form
+              onSubmit={
+                handleSubmit
+              }
+            >
+              {/* ===========================================
+                  SMALL CHECKOUT HEADER
+              ============================================ */}
+
+              <div
+                className="
+                  border-b
+                  border-black/[0.08]
+                  pb-5
+                "
+              >
+                <p
+                  className="
+                    text-[12px]
+                    font-medium
+                    text-[#ff914d]
+                  "
+                >
+                  Secure checkout
+                </p>
+
+                <h3
+                  className="
+                    mt-1
+                    text-[25px]
+                    font-medium
+                    leading-[1.2]
+                    tracking-[-0.02em]
+                    text-black
+                  "
+                >
+                  Purchase your ticket
+                </h3>
+              </div>
+
+              {/* ===========================================
+                  ERROR
+              ============================================ */}
+
+              {status.error && (
+                <div
+                  className="
+                    mt-5
+                    border-l-2
+                    border-red-500
+                    bg-red-50
+                    px-4
+                    py-3
+                    text-[13px]
+                    leading-[1.5]
+                    text-red-700
+                  "
+                >
+                  {status.error}
+                </div>
+              )}
+
+              {/* ===========================================
+                  QUANTITY
+              ============================================ */}
+
+              <div
+                className="
+                  mt-6
+                  flex
+                  items-center
+                  justify-between
+                  gap-5
+                  border-b
+                  border-black/[0.08]
+                  pb-6
+                "
+              >
+                <div>
+                  <p
+                    className="
+                      text-[14px]
+                      font-medium
+                      text-black
+                    "
+                  >
+                    Ticket quantity
+                  </p>
+
+                  <p
+                    className="
+                      mt-1
+                      text-[12px]
+                      text-black/45
+                    "
+                  >
+                    KES{' '}
+                    {ticketPriceKES.toLocaleString()}{' '}
+                    per ticket
+                  </p>
+                </div>
+
+                <div
+                  className="
+                    flex
+                    items-center
+                    border
+                    border-black/15
+                  "
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm(
+                        (
+                          previous
+                        ) => ({
+                          ...previous,
+
+                          quantity:
+                            Math.max(
+                              1,
+                              previous.quantity -
+                                1
+                            ),
+                        })
+                      )
+                    }
+                    className="
+                      flex
+                      h-10
+                      w-10
+                      items-center
+                      justify-center
+                      text-[18px]
+                      text-black
+                      transition-colors
+
+                      hover:bg-[#f4f4f4]
+                      hover:text-[#ff914d]
+                    "
+                  >
+                    −
+                  </button>
+
+                  <span
+                    className="
+                      flex
+                      h-10
+                      min-w-[44px]
+                      items-center
+                      justify-center
+                      border-x
+                      border-black/15
+                      text-[15px]
+                      font-medium
+                      text-black
+                    "
+                  >
+                    {form.quantity}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm(
+                        (
+                          previous
+                        ) => ({
+                          ...previous,
+
+                          quantity:
+                            previous.quantity +
+                            1,
+                        })
+                      )
+                    }
+                    className="
+                      flex
+                      h-10
+                      w-10
+                      items-center
+                      justify-center
+                      text-[18px]
+                      text-black
+                      transition-colors
+
+                      hover:bg-[#f4f4f4]
+                      hover:text-[#ff914d]
+                    "
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* ===========================================
+                  FULL NAME
+              ============================================ */}
+
+              <div
+                className="
+                  mt-6
+                "
+              >
+                <label
+                  htmlFor="modal-ticket-name"
+                  className="
+                    block
+                    text-[13px]
+                    font-medium
+                    text-black
+                  "
+                >
+                  Full name
+                </label>
+
+                <input
+                  id="modal-ticket-name"
+                  type="text"
+                  required
+                  autoComplete="name"
+                  placeholder="Your full name"
+                  value={
+                    form.name
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    updateForm(
+                      'name',
+                      event.target
+                        .value
+                    )
+                  }
+                  className="
+                    mt-2
+                    w-full
+                    border
+                    border-black/15
+                    bg-white
+                    px-4
+                    py-3.5
+                    text-[14px]
+                    text-black
+                    outline-none
+                    transition-colors
+
+                    placeholder:text-black/30
+
+                    focus:border-[#762e99]
+                  "
+                />
+              </div>
+
+              {/* ===========================================
+                  EMAIL
+              ============================================ */}
+
+              <div
+                className="
+                  mt-5
+                "
+              >
+                <label
+                  htmlFor="modal-ticket-email"
+                  className="
+                    block
+                    text-[13px]
+                    font-medium
+                    text-black
+                  "
+                >
+                  Email address
+                </label>
+
+                <p
+                  className="
+                    mt-1
+                    text-[11px]
+                    text-black/45
+                  "
+                >
+                  Your QR ticket will
+                  be delivered here.
+                </p>
+
+                <input
+                  id="modal-ticket-email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  value={
+                    form.email
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    updateForm(
+                      'email',
+                      event.target
+                        .value
+                    )
+                  }
+                  className="
+                    mt-2
+                    w-full
+                    border
+                    border-black/15
+                    bg-white
+                    px-4
+                    py-3.5
+                    text-[14px]
+                    text-black
+                    outline-none
+                    transition-colors
+
+                    placeholder:text-black/30
+
+                    focus:border-[#762e99]
+                  "
+                />
+              </div>
+
+              {/* ===========================================
+                  M-PESA PHONE
+              ============================================ */}
+
+              <div
+                className="
+                  mt-5
+                "
+              >
+                <label
+                  htmlFor="modal-ticket-phone"
+                  className="
+                    block
+                    text-[13px]
+                    font-medium
+                    text-black
+                  "
+                >
+                  M-Pesa phone number
+                </label>
+
+                <p
+                  className="
+                    mt-1
+                    text-[11px]
+                    text-black/45
+                  "
+                >
+                  We'll send the STK
+                  Push to this number.
+                </p>
+
+                <input
+                  id="modal-ticket-phone"
+                  type="tel"
+                  required
+                  autoComplete="tel"
+                  inputMode="tel"
+                  placeholder="0712345678"
+                  value={
+                    form.phone
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    updateForm(
+                      'phone',
+                      event.target
+                        .value
+                    )
+                  }
+                  className="
+                    mt-2
+                    w-full
+                    border
+                    border-black/15
+                    bg-white
+                    px-4
+                    py-3.5
+                    text-[14px]
+                    text-black
+                    outline-none
+                    transition-colors
+
+                    placeholder:text-black/30
+
+                    focus:border-[#762e99]
+                  "
+                />
+              </div>
+
+              {/* ===========================================
+                  TOTAL
+              ============================================ */}
+
+              <div
+                className="
+                  mt-7
+                  border-t
+                  border-black/[0.08]
+                  pt-6
+                "
+              >
+                <div
+                  className="
+                    flex
+                    items-end
+                    justify-between
+                    gap-5
+                  "
+                >
+                  <div>
+                    <p
+                      className="
+                        text-[12px]
+                        text-black/50
+                      "
+                    >
+                      Total payable
+                    </p>
+
+                    <p
+                      className="
+                        mt-1
+                        text-[12px]
+                        text-black/40
+                      "
+                    >
+                      {form.quantity}{' '}
+                      ticket
+                      {form.quantity >
+                      1
+                        ? 's'
+                        : ''}
+                    </p>
+                  </div>
+
+                  <p
+                    className="
+                      text-[25px]
+                      font-medium
+                      tracking-[-0.02em]
+                      text-black
+                    "
+                  >
+                    KES{' '}
+                    {totalAmountKES.toLocaleString()}
+                  </p>
+                </div>
+
+                {/* =========================================
+                    PURCHASE BUTTON
+                ========================================== */}
+
+                <button
+                  type="submit"
+                  disabled={
+                    status.loading
+                  }
+                  className="
+                    mt-6
+                    w-full
+                    rounded-full
+                    bg-gradient-to-r
+                    from-[#5e2590]
+                    to-[#762e99]
+                    px-5
+                    py-4
+                    text-[14px]
+                    font-medium
+                    text-white
+                    transition-all
+                    duration-200
+
+                    hover:opacity-90
+
+                    active:scale-[0.99]
+
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
+                  "
+                >
+                  {status.loading
+                    ? 'Sending M-Pesa request...'
+                    : `Pay KES ${totalAmountKES.toLocaleString()} with M-Pesa`}
+                </button>
+
+                {/* =========================================
+                    M-PESA SECURITY SVG
+
+                    Original SVG dimensions:
+                    489 × 184
+                ========================================== */}
+
+                <div
+                  className="
+                    mt-5
+                    flex
+                    items-center
+                    justify-center
+                  "
+                >
+                  <img
+                    src={
+                      MPESA_SECURE_IMAGE
+                    }
+                    alt="Pay securely with M-Pesa"
+                    width={489}
+                    height={184}
+                    className="
+                      h-auto
+                      w-[145px]
+                      object-contain
+
+                      sm:w-[155px]
+                    "
+                  />
+                </div>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );
