@@ -232,15 +232,21 @@
 
 import React, {
   useEffect,
+  useRef,
   useState,
 } from 'react';
 
-import { X } from 'lucide-react';
+import { X, CheckCircle2, Clock, RefreshCw } from 'lucide-react';
 import axios from 'axios';
+import { io } from 'socket.io-client';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   'http://localhost:5000/api';
+
+const SOCKET_URL =
+  process.env.NEXT_PUBLIC_SOCKET_URL ||
+  'http://localhost:5000';
 
 /* =========================================================
    IMAGE URLS
@@ -319,15 +325,98 @@ export default function VoteModal({
     setPhone,
   ] = useState('');
 
-  const [
-    status,
-    setStatus,
-  ] = useState({
-    loading: false,
-    success: false,
-    error: '',
-    checkoutRequestID: '',
-  });
+  // 'idle' | 'initiating' | 'awaiting_pin' | 'confirmed' | 'failed'
+  const [paymentStage, setPaymentStage] = useState('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [checkoutRequestID, setCheckoutRequestID] = useState('');
+  const [pollCountdown, setPollCountdown] = useState(90);
+
+  const pollIntervalRef = useRef(null);
+  const socketRef = useRef(null);
+
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      stopPolling();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
+
+  const handlePaymentSuccess = () => {
+    stopPolling();
+    setPaymentStage('confirmed');
+    setErrorMessage('');
+    if (onSuccess) {
+      onSuccess();
+    }
+  };
+
+  const handlePaymentFailure = (msg) => {
+    stopPolling();
+    setPaymentStage('failed');
+    setErrorMessage(msg || 'Payment was cancelled or failed on your mobile device. Please try again.');
+  };
+
+  const startPollingPayment = (reqId) => {
+    stopPolling();
+    let seconds = 90;
+    setPollCountdown(seconds);
+
+    // 1. WebSocket real-time push
+    try {
+      const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+      socketRef.current = socket;
+
+      socket.on(`last_dance:vote_paid:${reqId}`, (data) => {
+        console.log('[LastDance] Instant real-time vote payment confirmation:', data);
+        handlePaymentSuccess();
+      });
+
+      socket.on(`last_dance:vote_failed:${reqId}`, (data) => {
+        console.log('[LastDance] Vote payment failed:', data);
+        handlePaymentFailure(data.message);
+      });
+    } catch (wsErr) {
+      console.warn('[LastDance] WebSocket error:', wsErr.message);
+    }
+
+    // 2. HTTP polling every 2.5s
+    pollIntervalRef.current = setInterval(async () => {
+      seconds -= 2.5;
+      setPollCountdown(Math.max(0, Math.round(seconds)));
+
+      if (seconds <= 0) {
+        stopPolling();
+        return;
+      }
+
+      try {
+        const res = await axios.get(`${API_BASE_URL}/last-dance/payment-status/${reqId}`);
+        if (res.data?.success && res.data.status === 'completed') {
+          handlePaymentSuccess();
+        } else if (res.data?.status === 'failed') {
+          handlePaymentFailure('Payment was cancelled or failed on your device.');
+        }
+      } catch (err) {
+        // Continue polling until countdown expires
+      }
+    }, 2500);
+  };
+
+  const resetForm = () => {
+    stopPolling();
+    setPaymentStage('idle');
+    setErrorMessage('');
+    setCheckoutRequestID('');
+  };
 
   /* =======================================================
      LOCK BODY SCROLL
@@ -399,97 +488,39 @@ export default function VoteModal({
      SUBMIT VOTE
   ======================================================= */
 
-  const handleSubmit =
-    async (event) => {
-      event.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setErrorMessage('');
+    setPaymentStage('initiating');
 
-      setStatus({
-        loading: true,
-        success: false,
-        error: '',
-        checkoutRequestID: '',
-      });
-
-      try {
-        const response =
-          await axios.post(
-            `${API_BASE_URL}/last-dance/cast-vote`,
-            {
-              candidateId:
-                candidate._id,
-
-              votesCount,
-
-              phone,
-            }
-          );
-
-        if (
-          response.data?.success
-        ) {
-          const checkoutRequestID =
-            response.data
-              .checkoutRequestID;
-
-          setStatus({
-            loading: false,
-            success: true,
-            error: '',
-            checkoutRequestID,
-          });
-
-          /* -----------------------------------------
-             Optional test-mode simulation
-          ------------------------------------------ */
-
-          try {
-            await axios.post(
-              `${API_BASE_URL}/last-dance/test-simulate-payment`,
-              {
-                checkoutRequestID,
-              }
-            );
-          } catch (
-            simulationError
-          ) {
-            // Optional simulation.
-          }
-
-          if (onSuccess) {
-            onSuccess();
-          }
-
-          return;
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/last-dance/cast-vote`,
+        {
+          candidateId: candidate._id,
+          votesCount,
+          phone,
         }
+      );
 
-        setStatus({
-          loading: false,
-          success: false,
-
-          error:
-            response.data
-              ?.message ||
-            'Vote payment failed.',
-
-          checkoutRequestID:
-            '',
-        });
-      } catch (error) {
-        setStatus({
-          loading: false,
-          success: false,
-
-          error:
-            error.response
-              ?.data
-              ?.message ||
-            'M-Pesa STK push failed.',
-
-          checkoutRequestID:
-            '',
-        });
+      if (response.data?.success) {
+        const reqId = response.data.checkoutRequestID;
+        setCheckoutRequestID(reqId);
+        setPaymentStage('awaiting_pin');
+        startPollingPayment(reqId);
+        return;
       }
-    };
+
+      setPaymentStage('idle');
+      setErrorMessage(response.data?.message || 'Vote payment initiation failed.');
+    } catch (error) {
+      setPaymentStage('idle');
+      setErrorMessage(
+        error.response?.data?.message ||
+        'M-Pesa STK push prompt failed to trigger. Please check your phone number and network.'
+      );
+    }
+  };
 
   return (
     <div
@@ -717,213 +748,110 @@ export default function VoteModal({
             </div>
           </div>
 
-          {status.success ? (
+          {paymentStage === 'confirmed' ? (
             /* =================================================
-                SUCCESS
+                CONFIRMED SUCCESS
             ================================================= */
 
-            <div
-              className="
-                py-7
-              "
-            >
-              <div
-                className="
-                  flex
-                  h-12
-                  w-12
-                  items-center
-                  justify-center
-                  rounded-full
-                  bg-[#5e2590]
-                  text-[22px]
-                  font-medium
-                  text-white
-                "
-              >
+            <div className="py-7 text-left">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/20 text-2xl font-bold">
                 ✓
               </div>
 
-              <h4
-                className="
-                  mt-5
-                  text-[26px]
-                  font-medium
-                  leading-[1.2]
-                  tracking-[-0.02em]
-                  text-black
-                "
-              >
-                Check your phone.
+              <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-800">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                Votes Verified & Counted
+              </div>
+
+              <h4 className="mt-3 text-[24px] font-semibold leading-[1.2] tracking-[-0.02em] text-black">
+                Votes Successfully Recorded!
               </h4>
 
-              <p
-                className="
-                  mt-3
-                  text-[14px]
-                  font-normal
-                  leading-[1.65]
-                  text-[#242424]
-                "
-              >
-                We sent an M-Pesa
-                request for{' '}
-
-                <strong>
-                  KES{' '}
-                  {amountKES.toLocaleString()}
-                </strong>
-
-                . Enter your M-Pesa PIN
-                to cast{' '}
-
-                <strong>
-                  {votesCount}{' '}
-                  vote
-                  {votesCount > 1
-                    ? 's'
-                    : ''}
-                </strong>{' '}
-
-                for{' '}
-
-                <strong>
-                  {candidate.name}
-                </strong>
-                .
+              <p className="mt-2 text-[13.5px] font-normal leading-[1.65] text-[#242424]">
+                You have officially cast <strong>{votesCount} vote{votesCount > 1 ? 's' : ''}</strong> for <strong>{candidate.name}</strong>.
               </p>
 
               {/* =========================================
                   VOTE SUMMARY
               ========================================== */}
 
-              <div
-                className="
-                  mt-5
-                  border-l-2
-                  border-[#ff914d]
-                  bg-[#f7f7f7]
-                  px-4
-                  py-4
-                "
-              >
-                <div
-                  className="
-                    flex
-                    items-end
-                    justify-between
-                    gap-4
-                  "
-                >
-                  <div>
-                    <p
-                      className="
-                        text-[11px]
-                        text-black/45
-                      "
-                    >
-                      Vote quantity
-                    </p>
-
-                    <p
-                      className="
-                        mt-1
-                        text-[14px]
-                        font-medium
-                        text-black
-                      "
-                    >
-                      {votesCount}{' '}
-                      vote
-                      {votesCount > 1
-                        ? 's'
-                        : ''}
-                    </p>
-                  </div>
-
-                  <div
-                    className="
-                      text-right
-                    "
-                  >
-                    <p
-                      className="
-                        text-[11px]
-                        text-black/45
-                      "
-                    >
-                      Payment
-                    </p>
-
-                    <p
-                      className="
-                        mt-1
-                        text-[18px]
-                        font-medium
-                        text-[#762e99]
-                      "
-                    >
-                      KES{' '}
-                      {amountKES.toLocaleString()}
-                    </p>
-                  </div>
+              <div className="mt-5 rounded-2xl border border-black/10 bg-[#f7f7f7] p-4 text-[12.5px] space-y-2">
+                <div className="flex justify-between items-center text-black/60 pb-2 border-b border-black/[0.08]">
+                  <span>Candidate</span>
+                  <span className="font-semibold text-black">{candidate.name}</span>
                 </div>
-              </div>
-
-              {/* =========================================
-                  M-PESA IMAGE
-              ========================================== */}
-
-              <div
-                className="
-                  mt-6
-                  flex
-                  items-center
-                  justify-center
-                "
-              >
-                <img
-                  src={
-                    MPESA_SECURE_IMAGE
-                  }
-                  alt="Pay securely with M-Pesa"
-                  width={489}
-                  height={184}
-                  className="
-                    h-auto
-                    w-[145px]
-                    object-contain
-
-                    sm:w-[155px]
-                  "
-                />
+                <div className="flex justify-between items-center text-black/60">
+                  <span>Votes Added</span>
+                  <span className="font-semibold text-emerald-700">+{votesCount} Votes</span>
+                </div>
+                <div className="flex justify-between items-center text-black/60">
+                  <span>Amount Paid</span>
+                  <span className="font-bold text-black">KES {amountKES.toLocaleString()}</span>
+                </div>
               </div>
 
               <button
                 type="button"
                 onClick={onClose}
-                className="
-                  mt-6
-                  w-full
-                  rounded-full
-                  bg-gradient-to-r
-                  from-[#5e2590]
-                  to-[#762e99]
-                  px-5
-                  py-3.5
-                  text-[14px]
-                  font-medium
-                  text-white
-                  transition-all
-                  duration-200
-
-                  hover:opacity-90
-
-                  active:scale-[0.99]
-                "
+                className="mt-6 w-full rounded-full bg-gradient-to-r from-[#5e2590] to-[#762e99] px-5 py-3.5 text-[14px] font-medium text-white shadow-md hover:opacity-90 transition-all active:scale-[0.99]"
               >
-                Done
+                Close & Return
               </button>
+            </div>
+          ) : paymentStage === 'awaiting_pin' ? (
+            /* =================================================
+                AWAITING PIN STATE
+            ================================================= */
+
+            <div className="py-7 text-left">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#ff914d] text-white shadow-md shadow-[#ff914d]/30">
+                <Clock className="w-6 h-6 animate-spin" style={{ animationDuration: '6s' }} />
+              </div>
+
+              <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-800">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+                Awaiting PIN Entry on Phone
+              </div>
+
+              <h4 className="mt-3 text-[24px] font-medium leading-[1.2] tracking-[-0.02em] text-black">
+                Check your phone.
+              </h4>
+
+              <p className="mt-2 text-[13.5px] font-normal leading-[1.65] text-[#242424]">
+                An M-Pesa prompt for <strong>KES {amountKES.toLocaleString()}</strong> has been sent to <strong className="text-black">{phone}</strong> for {votesCount} vote{votesCount > 1 ? 's' : ''}.
+              </p>
+
+              <div className="mt-4 rounded-2xl border border-black/10 bg-[#f7f7f7] p-3.5 text-[12px] text-black/70 space-y-2">
+                <div className="flex items-start gap-2">
+                  <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-black/10 text-[10px] font-bold text-black">1</span>
+                  <span>Unlock your phone screen now.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-black/10 text-[10px] font-bold text-black">2</span>
+                  <span>Enter your M-Pesa PIN on the prompt to authorize your vote.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-black/10 text-[10px] font-bold text-black">3</span>
+                  <span>Votes will be credited immediately upon confirmation.</span>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between border-t border-black/10 pt-3 text-[12px] text-black/50">
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#762e99]" />
+                  <span>Verifying vote payment ({pollCountdown}s)</span>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="w-full rounded-full border border-black/15 py-3 text-[13px] font-medium text-black hover:bg-black/5 transition"
+                >
+                  Cancel / Change Number
+                </button>
+              </div>
             </div>
           ) : (
             /* =================================================
@@ -987,7 +915,7 @@ export default function VoteModal({
                   ERROR
               ============================================ */}
 
-              {status.error && (
+              {errorMessage && (
                 <div
                   className="
                     mb-5
@@ -1001,7 +929,7 @@ export default function VoteModal({
                     text-red-700
                   "
                 >
-                  {status.error}
+                  {errorMessage}
                 </div>
               )}
 
@@ -1464,7 +1392,7 @@ export default function VoteModal({
                 <button
                   type="submit"
                   disabled={
-                    status.loading
+                    paymentStage === 'initiating'
                   }
                   className="
                     mt-6
@@ -1489,7 +1417,7 @@ export default function VoteModal({
                     disabled:opacity-50
                   "
                 >
-                  {status.loading
+                  {paymentStage === 'initiating'
                     ? 'Sending M-Pesa request...'
                     : `Cast ${votesCount} Vote${
                         votesCount >

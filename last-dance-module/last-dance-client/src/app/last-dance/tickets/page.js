@@ -1730,10 +1730,16 @@ import React, {
 } from 'react';
 
 import axios from 'axios';
+import { io } from 'socket.io-client';
+import { CheckCircle2, Clock, AlertCircle, RefreshCw, Download, ShieldCheck } from 'lucide-react';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   'http://localhost:5000/api';
+
+const SOCKET_URL =
+  process.env.NEXT_PUBLIC_SOCKET_URL ||
+  'http://localhost:5000';
 
 /* =========================================================
    IMAGE URLS
@@ -2015,118 +2021,146 @@ export default function TicketsPage() {
       quantity: 1,
     });
 
-  const ticketPriceKES =
-    500;
+  const ticketPriceKES = 500;
+  const totalAmountKES = form.quantity * ticketPriceKES;
 
-  const [status, setStatus] =
-    useState({
-      loading: false,
-      success: false,
-      error: '',
-      checkoutRequestID: '',
-    });
+  // 'idle' | 'initiating' | 'awaiting_pin' | 'confirmed' | 'failed'
+  const [paymentStage, setPaymentStage] = useState('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [checkoutRequestID, setCheckoutRequestID] = useState('');
+  const [confirmedTicket, setConfirmedTicket] = useState(null);
+  const [pollCountdown, setPollCountdown] = useState(90);
 
-  const totalAmountKES =
-    form.quantity *
-    ticketPriceKES;
+  const pollIntervalRef = useRef(null);
+  const socketRef = useRef(null);
+
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      stopPolling();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
+
+  const handlePaymentSuccess = (ticketDetails) => {
+    stopPolling();
+    setConfirmedTicket(ticketDetails);
+    setPaymentStage('confirmed');
+    setErrorMessage('');
+  };
+
+  const handlePaymentFailure = (msg) => {
+    stopPolling();
+    setPaymentStage('failed');
+    setErrorMessage(msg || 'Payment was cancelled or failed on your mobile device. Please try again.');
+  };
+
+  const startPollingPayment = (reqId) => {
+    stopPolling();
+    let seconds = 90;
+    setPollCountdown(seconds);
+
+    // 1. Instant WebSocket push notification
+    try {
+      const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+      socketRef.current = socket;
+
+      socket.on(`last_dance:ticket_paid:${reqId}`, (data) => {
+        console.log('[LastDance] Instant real-time ticket payment confirmation:', data);
+        handlePaymentSuccess(data.ticketOrder || data);
+      });
+
+      socket.on(`last_dance:ticket_failed:${reqId}`, (data) => {
+        console.log('[LastDance] Ticket payment failed:', data);
+        handlePaymentFailure(data.message);
+      });
+    } catch (wsErr) {
+      console.warn('[LastDance] WebSocket error:', wsErr.message);
+    }
+
+    // 2. Fallback polling every 2.5s
+    pollIntervalRef.current = setInterval(async () => {
+      seconds -= 2.5;
+      setPollCountdown(Math.max(0, Math.round(seconds)));
+
+      if (seconds <= 0) {
+        stopPolling();
+        return;
+      }
+
+      try {
+        const res = await axios.get(`${API_BASE_URL}/last-dance/payment-status/${reqId}`);
+        if (res.data?.success && res.data.status === 'completed') {
+          handlePaymentSuccess(res.data.details);
+        } else if (res.data?.status === 'failed') {
+          handlePaymentFailure('Payment was cancelled or failed on your device.');
+        }
+      } catch (err) {
+        // Continue polling until countdown expires
+      }
+    }, 2500);
+  };
 
   /* =======================================================
      SCROLL TO CHECKOUT
   ======================================================= */
 
-  const scrollToCheckout =
-    () => {
-      checkoutRef.current?.scrollIntoView(
-        {
-          behavior: 'smooth',
-          block: 'start',
-        }
-      );
-    };
+  const scrollToCheckout = () => {
+    checkoutRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  };
 
   /* =======================================================
      PAYMENT
   ======================================================= */
 
-  const handleSubmit =
-    async (event) => {
-      event.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setErrorMessage('');
+    setPaymentStage('initiating');
 
-      setStatus({
-        loading: true,
-        success: false,
-        error: '',
-        checkoutRequestID: '',
-      });
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/last-dance/buy-ticket`,
+        form
+      );
 
-      try {
-        const response =
-          await axios.post(
-            `${API_BASE_URL}/last-dance/buy-ticket`,
-            form
-          );
-
-        if (
-          response.data
-            ?.success
-        ) {
-          const checkoutRequestID =
-            response.data
-              .checkoutRequestID;
-
-          setStatus({
-            loading: false,
-            success: true,
-            error: '',
-            checkoutRequestID,
-          });
-
-          try {
-            await axios.post(
-              `${API_BASE_URL}/last-dance/test-simulate-payment`,
-              {
-                checkoutRequestID,
-              }
-            );
-          } catch (
-            simulationError
-          ) {
-            // Optional test mode simulation.
-          }
-
-          return;
-        }
-
-        setStatus({
-          loading: false,
-
-          success: false,
-
-          error:
-            response.data
-              ?.message ||
-            'Payment initiation failed.',
-
-          checkoutRequestID:
-            '',
-        });
-      } catch (error) {
-        setStatus({
-          loading: false,
-
-          success: false,
-
-          error:
-            error.response
-              ?.data
-              ?.message ||
-            'M-Pesa STK push failed to trigger.',
-
-          checkoutRequestID:
-            '',
-        });
+      if (response.data?.success) {
+        const reqId = response.data.checkoutRequestID;
+        setCheckoutRequestID(reqId);
+        setPaymentStage('awaiting_pin');
+        startPollingPayment(reqId);
+        return;
       }
-    };
+
+      setPaymentStage('idle');
+      setErrorMessage(response.data?.message || 'Payment initiation failed.');
+    } catch (error) {
+      setPaymentStage('idle');
+      setErrorMessage(
+        error.response?.data?.message ||
+        'M-Pesa STK push prompt failed to trigger. Please check your phone number and network.'
+      );
+    }
+  };
+
+  const resetForm = () => {
+    stopPolling();
+    setPaymentStage('idle');
+    setErrorMessage('');
+    setCheckoutRequestID('');
+    setConfirmedTicket(null);
+  };
 
   return (
     <main
@@ -2401,138 +2435,111 @@ export default function TicketsPage() {
                 </div>
 
                 {/* =========================================
-                    SUCCESS
+                    CHECKOUT CONTENT BY PAYMENT STAGE
                 ========================================== */}
 
-                {status.success ? (
-                  <div
-                    className="
-                      py-7
-                    "
-                  >
-                    <div
-                      className="
-                        flex
-                        h-12
-                        w-12
-                        items-center
-                        justify-center
-                        rounded-full
-                        bg-[#5e2590]
-                        text-[22px]
-                        text-white
-                      "
-                    >
+                {paymentStage === 'confirmed' ? (
+                  <div className="py-7 text-left">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/20 text-2xl font-bold">
                       ✓
                     </div>
+                    <div className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[12px] font-semibold text-emerald-800">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      Payment Verified & Confirmed
+                    </div>
+                    <h3 className="mt-3 text-[26px] font-semibold leading-[1.2] tracking-[-0.02em] text-black">
+                      Official Festival Pass Issued!
+                    </h3>
+                    <p className="mt-2 text-[14px] leading-[1.65] text-[#242424]">
+                      Your entry pass has been generated and sent to <strong className="text-black font-semibold">{form.email}</strong>.
+                    </p>
 
-                    <h3
-                      className="
-                        mt-6
-                        text-[24px]
-                        font-medium
-                        leading-[1.2]
-                        tracking-[-0.02em]
-                        text-black
-                      "
-                    >
+                    <div className="mt-6 rounded-2xl border border-black/10 bg-[#f7f7f7] p-4 text-[13px] space-y-2.5">
+                      <div className="flex justify-between items-center text-black/60 pb-2 border-b border-black/[0.08]">
+                        <span>M-Pesa Receipt Code</span>
+                        <span className="font-mono font-bold text-black bg-white px-2 py-0.5 rounded border border-black/10">
+                          {confirmedTicket?.mpesaReceiptNumber || 'Verified'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-black/60">
+                        <span>Admission Passes</span>
+                        <span className="font-semibold text-black">{form.quantity} Pass(es)</span>
+                      </div>
+                      <div className="flex justify-between items-center text-black/60">
+                        <span>Total Paid</span>
+                        <span className="font-bold text-emerald-700">KES {totalAmountKES.toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-7 flex flex-col gap-3">
+                      <a
+                        href={`http://localhost:5000/api/last-dance/tickets/${confirmedTicket?._id || confirmedTicket?.ticketId}/pass`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 w-full rounded-full bg-gradient-to-r from-[#5e2590] to-[#762e99] px-5 py-4 text-[14px] font-medium text-white shadow-md hover:opacity-90 transition-all active:scale-[0.99]"
+                      >
+                        <Download className="w-4 h-4" />
+                        View & Download Official Pass (.HTML)
+                      </a>
+                      <button
+                        type="button"
+                        onClick={resetForm}
+                        className="w-full rounded-full border border-black/15 py-3 text-[13px] font-medium text-black hover:bg-black/5 transition"
+                      >
+                        Buy More Tickets
+                      </button>
+                    </div>
+                  </div>
+                ) : paymentStage === 'awaiting_pin' ? (
+                  <div className="py-7 text-left">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#ff914d] text-white shadow-md shadow-[#ff914d]/30">
+                      <Clock className="w-6 h-6 animate-spin" style={{ animationDuration: '6s' }} />
+                    </div>
+
+                    <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-800">
+                      <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+                      Awaiting PIN Entry on Phone
+                    </div>
+
+                    <h3 className="mt-3 text-[24px] font-medium leading-[1.2] tracking-[-0.02em] text-black">
                       Check your phone.
                     </h3>
 
-                    <p
-                      className="
-                        mt-3
-                        text-[14px]
-                        font-normal
-                        leading-[1.65]
-                        text-[#242424]
-                      "
-                    >
-                      We sent an M-Pesa
-                      payment request for{' '}
-
-                      <strong>
-                        KES{' '}
-                        {totalAmountKES.toLocaleString()}
-                      </strong>
-
-                      . Enter your M-Pesa
-                      PIN to complete the
-                      purchase.
+                    <p className="mt-3 text-[14px] leading-[1.65] text-[#242424]">
+                      An M-Pesa prompt for <strong>KES {totalAmountKES.toLocaleString()}</strong> has been sent to <strong className="text-black">{form.phone}</strong>.
                     </p>
 
-                    <div
-                      className="
-                        mt-6
-                        border-l-2
-                        border-[#ff914d]
-                        bg-[#f7f7f7]
-                        px-4
-                        py-4
-                      "
-                    >
-                      <p
-                        className="
-                          text-[12px]
-                          leading-[1.6]
-                          text-black/60
-                        "
-                      >
-                        Your QR ticket will
-                        be delivered to
-                      </p>
-
-                      <p
-                        className="
-                          mt-1
-                          break-all
-                          text-[13px]
-                          font-medium
-                          text-black
-                        "
-                      >
-                        {form.email}
-                      </p>
+                    <div className="mt-5 rounded-2xl border border-black/10 bg-[#f7f7f7] p-4 text-[12px] text-black/70 space-y-2">
+                      <div className="flex items-start gap-2.5">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-black/10 text-[11px] font-bold text-black">1</span>
+                        <span>Unlock your phone screen now.</span>
+                      </div>
+                      <div className="flex items-start gap-2.5">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-black/10 text-[11px] font-bold text-black">2</span>
+                        <span>Enter your M-Pesa PIN on the prompt to authorize payment.</span>
+                      </div>
+                      <div className="flex items-start gap-2.5">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-black/10 text-[11px] font-bold text-black">3</span>
+                        <span>Keep this window open; ticket pass loads automatically.</span>
+                      </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setStatus({
-                          loading:
-                            false,
+                    <div className="mt-5 flex items-center justify-between border-t border-black/10 pt-4 text-[12px] text-black/50">
+                      <div className="flex items-center gap-2">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#762e99]" />
+                        <span>Verifying payment with M-Pesa ({pollCountdown}s)</span>
+                      </div>
+                    </div>
 
-                          success:
-                            false,
-
-                          error: '',
-
-                          checkoutRequestID:
-                            '',
-                        })
-                      }
-                      className="
-                        mt-7
-                        w-full
-                        rounded-full
-                        bg-gradient-to-r
-                        from-[#5e2590]
-                        to-[#762e99]
-                        px-5
-                        py-3.5
-                        text-[14px]
-                        font-medium
-                        text-white
-                        transition-all
-                        duration-200
-
-                        hover:opacity-90
-
-                        active:scale-[0.99]
-                      "
-                    >
-                      Buy more tickets
-                    </button>
+                    <div className="mt-6">
+                      <button
+                        type="button"
+                        onClick={resetForm}
+                        className="w-full rounded-full border border-black/15 py-3 text-[13px] font-medium text-black hover:bg-black/5 transition"
+                      >
+                        Cancel / Change Number
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   /* =========================================
@@ -2549,7 +2556,7 @@ export default function TicketsPage() {
                   >
                     {/* ERROR */}
 
-                    {status.error && (
+                    {errorMessage && (
                       <div
                         className="
                           mb-5
@@ -2563,7 +2570,7 @@ export default function TicketsPage() {
                           text-red-700
                         "
                       >
-                        {status.error}
+                        {errorMessage}
                       </div>
                     )}
 
@@ -2961,7 +2968,7 @@ export default function TicketsPage() {
                       <button
                         type="submit"
                         disabled={
-                          status.loading
+                          paymentStage === 'initiating'
                         }
                         className="
                           mt-6
@@ -2986,9 +2993,14 @@ export default function TicketsPage() {
                           disabled:opacity-50
                         "
                       >
-                        {status.loading
-                          ? 'Sending M-Pesa request...'
-                          : `Pay KES ${totalAmountKES.toLocaleString()} with M-Pesa`}
+                        {paymentStage === 'initiating' ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            Sending STK Push to Phone...
+                          </span>
+                        ) : (
+                          `Pay KES ${totalAmountKES.toLocaleString()} with M-Pesa`
+                        )}
                       </button>
 
                       <div

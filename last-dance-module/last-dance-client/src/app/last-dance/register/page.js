@@ -349,6 +349,7 @@ import React, {
 
 import axios from 'axios';
 import Link from 'next/link';
+import CloudinaryImageUpload from '@/components/last-dance/CloudinaryImageUpload';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
@@ -1289,212 +1290,16 @@ export default function CandidateRegisterPage() {
                   </div>
 
                   {/* =====================================
-                      PORTRAIT
+                      PORTRAIT / AVATAR
                   ====================================== */}
-
-                  <div
-                    className="
-                      mt-7
-                    "
-                  >
-                    <div>
-                      <p
-                        className="
-                          text-[13px]
-                          font-medium
-                          text-black
-                        "
-                      >
-                        Candidate portrait
-                      </p>
-
-                      <p
-                        className="
-                          mt-1
-                          text-[11px]
-                          leading-[1.5]
-                          text-black/45
-                        "
-                      >
-                        Choose a temporary
-                        portrait or paste
-                        your own image URL.
-                      </p>
-                    </div>
-
-                    {/* Presets */}
-
-                    <div
-                      className="
-                        mt-4
-                        grid
-                        grid-cols-3
-                        gap-3
-
-                        sm:grid-cols-5
-                      "
-                    >
-                      {PRESET_AVATARS.map(
-                        (
-                          item,
-                          index
-                        ) => {
-                          const selected =
-                            form.photoUrl ===
-                            item.url;
-
-                          return (
-                            <button
-                              key={
-                                item.url
-                              }
-                              type="button"
-                              onClick={() =>
-                                updateForm(
-                                  'photoUrl',
-                                  item.url
-                                )
-                              }
-                              aria-label={`Use ${item.label} portrait`}
-                              className="
-                                group
-                                text-left
-                              "
-                            >
-                              <div
-                                className={`
-                                  relative
-                                  aspect-square
-                                  w-full
-                                  overflow-hidden
-                                  transition-all
-                                  duration-200
-
-                                  ${
-                                    selected
-                                      ? 'ring-2 ring-[#762e99] ring-offset-2'
-                                      : ''
-                                  }
-                                `}
-                              >
-                                <img
-                                  src={
-                                    item.url
-                                  }
-                                  alt={
-                                    item.label
-                                  }
-                                  className="
-                                    h-full
-                                    w-full
-                                    object-cover
-                                    object-center
-                                  "
-                                />
-
-                                {selected && (
-                                  <div
-                                    className="
-                                      absolute
-                                      right-2
-                                      top-2
-                                      flex
-                                      h-6
-                                      w-6
-                                      items-center
-                                      justify-center
-                                      rounded-full
-                                      bg-[#5e2590]
-                                      text-[12px]
-                                      font-medium
-                                      text-white
-                                    "
-                                  >
-                                    ✓
-                                  </div>
-                                )}
-                              </div>
-
-                              <p
-                                className={`
-                                  mt-2
-                                  text-[11px]
-                                  font-medium
-                                  transition-colors
-
-                                  ${
-                                    selected
-                                      ? 'text-[#762e99]'
-                                      : 'text-black/55'
-                                  }
-                                `}
-                              >
-                                {
-                                  item.label
-                                }
-                              </p>
-                            </button>
-                          );
-                        }
-                      )}
-                    </div>
-
-                    {/* URL */}
-
-                    <div
-                      className="
-                        mt-5
-                      "
-                    >
-                      <label
-                        htmlFor="candidate-photo-url"
-                        className="
-                          block
-                          text-[12px]
-                          font-medium
-                          text-black/70
-                        "
-                      >
-                        Or paste image URL
-                      </label>
-
-                      <input
-                        id="candidate-photo-url"
-                        type="url"
-                        required
-                        placeholder="https://your-image-url.com/photo.jpg"
-                        value={
-                          form.photoUrl
-                        }
-                        onChange={(
-                          event
-                        ) =>
-                          updateForm(
-                            'photoUrl',
-                            event.target
-                              .value
-                          )
-                        }
-                        className="
-                          mt-2
-                          w-full
-                          border
-                          border-black/15
-                          bg-white
-                          px-4
-                          py-3.5
-                          text-[14px]
-                          font-normal
-                          text-black
-                          outline-none
-                          transition-colors
-
-                          placeholder:text-black/30
-
-                          focus:border-[#762e99]
-                        "
-                      />
-                    </div>
+                  <div className="mt-7">
+                    <CloudinaryImageUpload
+                      value={form.photoUrl}
+                      onChange={(url) => updateForm('photoUrl', url)}
+                      presets={PRESET_AVATARS}
+                      folder="last_dance_candidates"
+                      label="Candidate Portrait / Avatar"
+                    />
                   </div>
 
                   {/* =====================================

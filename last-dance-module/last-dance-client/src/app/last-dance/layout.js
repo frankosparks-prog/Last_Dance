@@ -125,11 +125,14 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import Navbar from '../../components/last-dance/Navbar';
 import Footer from '../../components/last-dance/Footer';
 import TicketModal from '../../components/last-dance/TicketModal';
 
 export default function LastDanceLayout({ children }) {
+  const pathname = usePathname();
+  const isAdminRoute = pathname?.startsWith('/last-dance/admin');
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
 
@@ -267,7 +270,17 @@ export default function LastDanceLayout({ children }) {
 
   // =============================================
   // LAYOUT
-  // =============================================
+  // If on admin routes, do not render public festival Navbar and Footer
+  if (isAdminRoute) {
+    return (
+      <div
+        className="min-h-screen bg-[#f7f7f7] text-[#1d1d1d] selection:bg-[#5e2590] selection:text-white"
+        style={{ fontFamily: 'Roboto, sans-serif' }}
+      >
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div

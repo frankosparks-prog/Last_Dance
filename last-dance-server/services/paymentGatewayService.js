@@ -42,13 +42,13 @@ class PaymentGatewayService {
     }
 
     // 1. DARAJA SAFARICOM M-PESA
-    if (selectedGateway === 'mpesa') {
+    if (selectedGateway === 'mpesa' && process.env.DARAJA_CONSUMER_KEY && process.env.DARAJA_CONSUMER_SECRET) {
       try {
         const shortcode = process.env.DARAJA_SHORTCODE || '174379';
         const passkey = process.env.DARAJA_PASSKEY || 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919';
         const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
         const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64');
-        const callbackUrl = process.env.DARAJA_CALLBACK_URL || 'https://api.nutripay.co.ke/api/mpesa/callback';
+        const callbackUrl = process.env.DARAJA_CALLBACK_URL || `${process.env.SERVER_URL || 'http://localhost:5000'}/api/last-dance/callback`;
 
         const token = await this.getDarajaToken();
         const stkRes = await axios.post(
@@ -89,9 +89,10 @@ class PaymentGatewayService {
     if (selectedGateway === 'payhero' || process.env.PAYHERO_API_KEY) {
       try {
         const payheroUrl = process.env.PAYHERO_API_URL || 'https://backend.payhero.co.ke/api/v2/payments';
-        const basicAuth = process.env.BASIC_AUTH_TOKEN || 'Basic cTIyc2dBM3NrRTRXMlpPQkxTa286RXNCVzYzR0pWb1VEbDdOTWJ0TzF5bmlpZmRjSHNqRUNnWnROWGs5Rw==';
-        const channelId = Number(process.env.PAYHERO_CHANNEL_ID || '5648');
-        const callbackUrl = process.env.PAYHERO_CALLBACK_URL || 'https://api.nutripay.co.ke/api/payhero/callback';
+        const basicAuth = process.env.BASIC_AUTH_TOKEN || Buffer.from(`${process.env.PAYHERO_API_KEY}:${process.env.PAYHERO_API_SECRET}`).toString('base64');
+        const formattedAuth = basicAuth.startsWith('Basic ') ? basicAuth : `Basic ${basicAuth}`;
+        const channelId = Number(process.env.PAYHERO_CHANNEL_ID || '5740');
+        const callbackUrl = process.env.PAYHERO_CALLBACK_URL || `${process.env.SERVER_URL || 'http://localhost:5000'}/api/last-dance/callback`;
 
         const payheroRes = await axios.post(
           payheroUrl,
@@ -105,7 +106,7 @@ class PaymentGatewayService {
           },
           {
             headers: {
-              Authorization: basicAuth,
+              Authorization: formattedAuth,
               'Content-Type': 'application/json'
             },
             timeout: 12000
@@ -121,11 +122,11 @@ class PaymentGatewayService {
           };
         }
       } catch (payheroErr) {
-        console.warn('[PaymentGatewayService] PayHero API call failed/sandbox fallback:', payheroErr.message);
+        console.warn('[PaymentGatewayService] PayHero API call error:', payheroErr.message);
       }
     }
 
-    // 3. FALLBACK SIMULATION (For test environments & instant demo verification)
+    // 3. Fallback request ID for offline/sandbox tracking
     return {
       CheckoutRequestID: checkoutRequestID,
       ResponseCode: '0',
@@ -136,6 +137,63 @@ class PaymentGatewayService {
   }
 
   /**
+   * Verify if a pending transaction was completed on PayHero
+   * @param {string} reference (checkoutRequestID or transaction reference)
+   * @param {string} [phone] (optional buyer/voter phone number for fallback match)
+   * @param {number} [amount] (optional expected amount in KES)
+   * @returns {Promise<{ success: boolean, mpesaReceiptNumber: string, amountPaid: number, transactionReference?: string } | null>}
+   */
+  async checkPayHeroTransaction(reference, phone = null, amount = null) {
+    if (!process.env.PAYHERO_API_KEY && !process.env.BASIC_AUTH_TOKEN) return null;
+    try {
+      const basicAuth = process.env.BASIC_AUTH_TOKEN || Buffer.from(`${process.env.PAYHERO_API_KEY}:${process.env.PAYHERO_API_SECRET}`).toString('base64');
+      const formattedAuth = basicAuth.startsWith('Basic ') ? basicAuth : `Basic ${basicAuth}`;
+      
+      const response = await axios.get('https://backend.payhero.co.ke/api/v2/transactions?page=1&limit=30', {
+        headers: {
+          Authorization: formattedAuth
+        },
+        timeout: 8000
+      });
+
+      const transactions = response.data?.transactions || [];
+
+      // 1. Direct match by transaction_reference or external_reference
+      let match = transactions.find(t => 
+        (t.transaction_reference === reference || t.external_reference === reference) &&
+        t.transaction_type === 'inbound_payment' &&
+        t.provider_reference &&
+        !t.provider_reference.startsWith('cost_')
+      );
+
+      // 2. Fallback match by phone & amount if reference wasn't directly matched
+      if (!match && phone && amount) {
+        const cleanPhone = String(phone).replace(/\+/g, '').replace(/^0/, '254');
+        match = transactions.find(t =>
+          t.transaction_type === 'inbound_payment' &&
+          Number(t.amount) >= Number(amount) &&
+          t.provider_reference &&
+          !t.provider_reference.startsWith('cost_') &&
+          (String(t.description || '').includes(cleanPhone) || String(t.description || '').includes(phone))
+        );
+      }
+
+      if (match) {
+        return {
+          success: true,
+          mpesaReceiptNumber: String(match.provider_reference).trim(),
+          amountPaid: Number(match.amount || 0),
+          transactionReference: match.transaction_reference
+        };
+      }
+      return null;
+    } catch (err) {
+      console.warn('[PaymentGatewayService] checkPayHeroTransaction warning:', err.message);
+      return null;
+    }
+  }
+
+  /**
    * Parse & verify callback data from PayHero or M-Pesa STK Push
    * @param {object} body 
    * @returns {object}
@@ -143,54 +201,74 @@ class PaymentGatewayService {
   verifyCallback(body) {
     console.log('[PaymentGatewayService] Verifying callback payload:', JSON.stringify(body, null, 2));
 
-    // PayHero callback structure check
-    if (body && (body.response || body.status || body.external_reference)) {
-      const resp = body.response || body;
+    if (!body || typeof body !== 'object') {
       return {
-        checkoutRequestID: resp.CheckoutRequestID || resp.external_reference || resp.reference || '',
-        merchantRequestID: resp.MerchantRequestID || resp.CheckoutRequestID || '',
-        externalReference: resp.external_reference || resp.ExternalReference || '',
-        success: resp.ResultCode === 0 || resp.Status === 'Success' || resp.status === 'Success' || resp.success === true,
-        mpesaReceiptNumber: resp.MpesaReceiptNumber || resp.MpesaCode || resp.mpesa_receipt || `NL${Date.now().toString().slice(-6)}`,
-        amountPaid: Number(resp.Amount || resp.amount || 0)
+        checkoutRequestID: '',
+        success: false,
+        mpesaReceiptNumber: '',
+        amountPaid: 0
       };
     }
 
-    // Safaricom Daraja STK callback structure check
-    if (body && body.Body && body.Body.stkCallback) {
+    // 1. Safaricom Daraja STK Push Callback Structure
+    if (body.Body && body.Body.stkCallback) {
       const stk = body.Body.stkCallback;
-      const checkoutRequestID = stk.CheckoutRequestID;
-      const merchantRequestID = stk.MerchantRequestID;
+      const checkoutRequestID = stk.CheckoutRequestID || '';
+      const merchantRequestID = stk.MerchantRequestID || '';
       const resultCode = stk.ResultCode;
-      const success = resultCode === 0;
+      const resultDesc = stk.ResultDesc || '';
 
-      let mpesaReceiptNumber = `NL${Date.now().toString().slice(-6)}`;
+      // ResultCode === 0 is the ONLY successful code in Daraja (e.g. 1032 is cancelled by user, 1 is insufficient funds)
+      const success = Number(resultCode) === 0;
+
+      let mpesaReceiptNumber = '';
       let amountPaid = 0;
 
-      if (stk.CallbackMetadata && stk.CallbackMetadata.Item) {
+      if (stk.CallbackMetadata && Array.isArray(stk.CallbackMetadata.Item)) {
         stk.CallbackMetadata.Item.forEach(item => {
-          if (item.Name === 'MpesaReceiptNumber') mpesaReceiptNumber = item.Value;
-          if (item.Name === 'Amount') amountPaid = item.Value;
+          if (item.Name === 'MpesaReceiptNumber') mpesaReceiptNumber = String(item.Value || '').trim();
+          if (item.Name === 'Amount') amountPaid = Number(item.Value || 0);
         });
       }
+
+      console.log(`[PaymentGatewayService] Daraja Callback: ResultCode=${resultCode} (${resultDesc}), Success=${success}, Receipt=${mpesaReceiptNumber}`);
 
       return {
         checkoutRequestID,
         merchantRequestID,
         externalReference: '',
-        success,
+        success: success && !!mpesaReceiptNumber,
         mpesaReceiptNumber,
-        amountPaid
+        amountPaid,
+        resultDesc
       };
     }
 
-    // Simple fallback structure
+    // 2. PayHero Kenya Callback Structure
+    if (body.response || body.status || body.external_reference || body.reference) {
+      const resp = body.response || body;
+      const statusStr = String(resp.status || resp.Status || '').trim().toLowerCase();
+      const isSuccess = statusStr === 'success' || resp.ResultCode === 0 || resp.success === true;
+      const receipt = resp.provider_reference || resp.MpesaReceiptNumber || resp.MpesaCode || resp.mpesa_receipt || resp.mpesa_reference || '';
+
+      return {
+        checkoutRequestID: resp.CheckoutRequestID || resp.external_reference || resp.reference || '',
+        merchantRequestID: resp.MerchantRequestID || resp.CheckoutRequestID || '',
+        externalReference: resp.external_reference || resp.ExternalReference || '',
+        success: isSuccess && !!receipt,
+        mpesaReceiptNumber: String(receipt).trim(),
+        amountPaid: Number(resp.Amount || resp.amount || 0)
+      };
+    }
+
+    // 3. Fallback check: strictly verify explicit success flag AND a receipt code
+    const isExplicit = body.success === true && !!body.mpesaReceiptNumber;
     return {
       checkoutRequestID: body.checkoutRequestID || body.CheckoutRequestID || '',
       merchantRequestID: body.merchantRequestID || '',
       externalReference: body.externalReference || '',
-      success: body.success !== false && body.status !== 'failed',
-      mpesaReceiptNumber: body.mpesaReceiptNumber || `NL${Date.now().toString().slice(-6)}`,
+      success: isExplicit,
+      mpesaReceiptNumber: String(body.mpesaReceiptNumber || '').trim(),
       amountPaid: Number(body.amountPaid || body.amount || 0)
     };
   }

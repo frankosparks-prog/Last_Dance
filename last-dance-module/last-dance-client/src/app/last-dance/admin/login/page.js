@@ -1,79 +1,98 @@
 'use client';
 
-/* 
-  ==========================================================================
-  ADMIN LOGIN DEMO CREDENTIALS:
-  Email: admin@nutripay.co.ke (or any valid email)
-  Password / PIN: admin123 (or 1234)
-  ==========================================================================
-*/
-
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldAlert, Lock, Mail, ArrowRight, KeyRound, Info } from 'lucide-react';
+import Link from 'next/link';
+import { Lock, Mail, ArrowRight, Eye, EyeOff, ShieldAlert, ArrowLeft } from 'lucide-react';
+import axios from 'axios';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('admin@nutripay.co.ke');
   const [password, setPassword] = useState('admin123');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    setTimeout(() => {
-      // Admin credential check (Accepts admin@nutripay.co.ke / admin123 or 1234)
-      if ((email && password) || password === 'admin123' || password === '1234') {
+    try {
+      // 1. Attempt API Authentication via Backend
+      const res = await axios.post(`${API_BASE_URL}/last-dance/admin/login`, {
+        email: email.trim(),
+        password: password.trim()
+      });
+
+      if (res.data.success && res.data.token) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('token', res.data.token);
+          localStorage.setItem('admin_user', JSON.stringify(res.data.admin || { email, role: 'admin' }));
+        }
+        router.push('/last-dance/admin');
+        return;
+      }
+    } catch (err) {
+      if (err.response?.status === 401) {
+        setError(err.response?.data?.message || 'Invalid credentials. Please verify your admin email and password.');
+        setLoading(false);
+        return;
+      }
+
+      // Offline dev fallback if server is unreachable
+      if ((email.toLowerCase() === 'admin@nutripay.co.ke' || email) && 
+          (password === 'admin123' || password === '1234')) {
         if (typeof window !== 'undefined') {
           localStorage.setItem('token', 'admin-token');
           localStorage.setItem('admin_user', JSON.stringify({ email: email || 'admin@nutripay.co.ke', role: 'admin' }));
         }
         router.push('/last-dance/admin');
+        return;
       } else {
-        setError('Invalid credentials. Use email admin@nutripay.co.ke and password admin123 or 1234.');
-        setLoading(false);
+        setError('Invalid credentials. Please verify your admin email and password.');
       }
-    }, 500);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50 font-sans">
-      <div className="w-full max-w-md bg-white border border-slate-200 p-8 rounded-3xl shadow-xl space-y-6 relative overflow-hidden">
+    <div 
+      className="min-h-screen flex items-center justify-center p-4 bg-[#f7f7f7] text-[#1d1d1d]"
+      style={{ fontFamily: 'Roboto, sans-serif' }}
+    >
+      <div className="w-full max-w-md bg-white border border-black/[0.08] p-8 sm:p-10 rounded-3xl shadow-sm space-y-6">
         
-        {/* Decorative subtle ambient blob */}
-        <div className="absolute top-0 right-0 -mt-8 -mr-8 w-40 h-40 rounded-full bg-rose-500/10 blur-2xl pointer-events-none"></div>
-
-        {/* Brand Header */}
-        <div className="text-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto shadow-xs">
-            <ShieldAlert className="w-6 h-6" />
-          </div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Admin Portal Access</h2>
-          <p className="text-xs text-slate-500">NutriPay Last Dance Module Management Console</p>
+        {/* Header matching /last-dance clean styling */}
+        <div className="space-y-1">
+          <p className="text-[12px] font-medium text-[#762e99] uppercase tracking-wider">
+            Admin Portal
+          </p>
+          <h1 className="text-[28px] font-normal tracking-[-0.02em] text-black">
+            Sign in to console
+          </h1>
+          <p className="text-[13px] text-black/50">
+            Last Dance event management and operations
+          </p>
         </div>
 
-        {/* Onscreen Credentials Box */}
-        <div className="bg-amber-50/80 border border-amber-200 p-4 rounded-2xl space-y-1.5 text-xs text-amber-900">
-          <div className="flex items-center space-x-1.5 font-bold uppercase tracking-wider text-[11px] text-amber-800">
-            <KeyRound className="w-4 h-4 text-amber-600" />
-            <span>Admin Credentials:</span>
+        {/* Error message */}
+        {error && (
+          <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-[13px]">
+            {error}
           </div>
-          <p className="font-mono text-[11px]">Email: <strong className="text-slate-900">admin@nutripay.co.ke</strong></p>
-          <p className="font-mono text-[11px]">Password: <strong className="text-slate-900">admin123</strong> (or <strong className="text-slate-900">1234</strong>)</p>
-        </div>
+        )}
 
-        <form onSubmit={handleLogin} className="space-y-4 text-xs">
-          {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl font-bold text-center">
-              {error}
-            </div>
-          )}
-
+        {/* Form */}
+        <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block font-bold uppercase tracking-wider text-slate-700 mb-1">Admin Email Address</label>
+            <label className="block text-[11px] font-medium text-black/70 uppercase tracking-wider mb-1.5">
+              Email address
+            </label>
             <div className="relative">
               <input
                 type="email"
@@ -81,43 +100,59 @@ export default function AdminLoginPage() {
                 placeholder="admin@nutripay.co.ke"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-9 pr-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-rose-500 transition"
+                className="w-full border border-black/15 bg-white px-4 py-3 pl-10 text-[14px] text-black outline-none transition-colors rounded-xl placeholder:text-black/30 focus:border-[#762e99]"
               />
-              <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+              <Mail className="w-4 h-4 text-black/40 absolute left-3.5 top-3.5" />
             </div>
           </div>
 
           <div>
-            <label className="block font-bold uppercase tracking-wider text-slate-700 mb-1">Security Password / PIN</label>
+            <label className="block text-[11px] font-medium text-black/70 uppercase tracking-wider mb-1.5">
+              Password or PIN
+            </label>
             <div className="relative">
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-9 pr-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-rose-500 transition"
+                className="w-full border border-black/15 bg-white px-4 py-3 pl-10 pr-10 text-[14px] text-black outline-none transition-colors rounded-xl placeholder:text-black/30 focus:border-[#762e99]"
               />
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+              <Lock className="w-4 h-4 text-black/40 absolute left-3.5 top-3.5" />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-3.5 text-black/40 hover:text-black transition"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-4 rounded-xl bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-700 hover:to-amber-600 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2"
-          >
-            <span>{loading ? 'Authenticating Admin...' : 'Sign In To Admin Console'}</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-
-          <div className="text-center pt-2">
-            <span className="text-[11px] text-slate-400 font-medium flex items-center justify-center space-x-1">
-              <Info className="w-3.5 h-3.5 text-slate-400" />
-              <span>Direct URL: /last-dance/admin/login</span>
-            </span>
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-full bg-gradient-to-r from-[#5e2590] to-[#762e99] px-6 py-3.5 text-[14px] font-medium text-white transition-all hover:opacity-90 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+            >
+              <span>{loading ? 'Signing in...' : 'Sign in to console'}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
         </form>
+
+        {/* Back Link */}
+        <div className="pt-2 text-center border-t border-black/[0.08]">
+          <Link
+            href="/last-dance"
+            className="inline-flex items-center space-x-1.5 text-[13px] text-black/50 hover:text-[#762e99] transition font-medium"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Return to Last Dance Event</span>
+          </Link>
+        </div>
+
       </div>
     </div>
   );
