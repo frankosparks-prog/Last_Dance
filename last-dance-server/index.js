@@ -51,7 +51,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/last-dance', lastDanceRoutes);
 
 // Database connection & Seed Mock Test Data
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/last_dance_db';
 
 const seedInitialData = async () => {
