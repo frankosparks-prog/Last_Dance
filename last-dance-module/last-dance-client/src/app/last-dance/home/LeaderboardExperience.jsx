@@ -495,6 +495,10 @@ const SOCKET_URL =
   process.env.NEXT_PUBLIC_SOCKET_URL ||
   'https://lastdance.co.ke';
 
+const SOCKET_PATH =
+  process.env.NEXT_PUBLIC_SOCKET_PATH ||
+  '/api/socket.io';
+
 const DEFAULT_CATEGORIES = [
   'Mr & Miss Last Dance',
   'Most Likely to Succeed',
@@ -607,10 +611,19 @@ export default function LeaderboardExperience() {
 
   useEffect(() => {
     const socket = io(SOCKET_URL, {
+      path: SOCKET_PATH,
       transports: [
         'websocket',
         'polling',
       ],
+    });
+
+    socket.on('connect', () => {
+      console.log('[Leaderboard] Connected to real-time socket:', socket.id);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.warn('[Leaderboard] Socket connection warning:', err.message);
     });
 
     const handleVoteUpdated = (data) => {
@@ -621,19 +634,25 @@ export default function LeaderboardExperience() {
         return;
       }
 
+      console.log('[Leaderboard] Real-time vote increment event:', data);
+
       setCandidates((previousCandidates) => {
+        let matched = false;
         const updatedCandidates =
           previousCandidates.map(
             (candidate) => {
               if (
-                candidate._id ===
-                data.candidateId
+                String(candidate._id) ===
+                String(data.candidateId)
               ) {
+                matched = true;
+                const nextVoteCount = data.newVoteCount !== undefined
+                  ? Number(data.newVoteCount)
+                  : ((Number(candidate.voteCount) || 0) + (Number(data.votesAdded) || 0));
+
                 return {
                   ...candidate,
-                  voteCount:
-                    data.newVoteCount ??
-                    candidate.voteCount,
+                  voteCount: nextVoteCount,
                 };
               }
 
@@ -641,10 +660,15 @@ export default function LeaderboardExperience() {
             }
           );
 
+        // If candidate not in current list (e.g. filtered view), re-fetch to ensure fresh data
+        if (!matched && fetchCandidates) {
+          fetchCandidates();
+        }
+
         return updatedCandidates.sort(
           (a, b) =>
-            (b.voteCount || 0) -
-            (a.voteCount || 0)
+            (Number(b.voteCount) || 0) -
+            (Number(a.voteCount) || 0)
         );
       });
     };
@@ -662,7 +686,7 @@ export default function LeaderboardExperience() {
 
       socket.disconnect();
     };
-  }, []);
+  }, [fetchCandidates]);
 
   // =============================================
   // AUTO-SCROLL TO NOMINEE WHEN LINK HAS NOMINEE ID

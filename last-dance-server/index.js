@@ -23,6 +23,18 @@ const io = new Server(server, {
 // Set global socket instance so controllers can broadcast real-time events
 global.io = io;
 
+// Enable Socket.IO to receive connections via /api/socket.io through reverse proxies
+server.prependListener('request', (req, res) => {
+  if (req.url && req.url.startsWith('/api/socket.io')) {
+    req.url = req.url.replace(/^\/api\/socket\.io/, '/socket.io');
+  }
+});
+server.prependListener('upgrade', (req, socket, head) => {
+  if (req.url && req.url.startsWith('/api/socket.io')) {
+    req.url = req.url.replace(/^\/api\/socket\.io/, '/socket.io');
+  }
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '25mb' }));

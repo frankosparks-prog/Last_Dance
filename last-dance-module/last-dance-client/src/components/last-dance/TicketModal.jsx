@@ -226,6 +226,10 @@ const SOCKET_URL =
   process.env.NEXT_PUBLIC_SOCKET_URL ||
   'https://lastdance.co.ke';
 
+const SOCKET_PATH =
+  process.env.NEXT_PUBLIC_SOCKET_PATH ||
+  '/api/socket.io';
+
 /* =========================================================
    IMAGE URLS
 ========================================================= */
@@ -326,7 +330,10 @@ export default function TicketModal({
 
     // 1. Instant WebSocket push notification
     try {
-      const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+      const socket = io(SOCKET_URL, {
+        path: SOCKET_PATH,
+        transports: ['websocket', 'polling']
+      });
       socketRef.current = socket;
 
       socket.on(`last_dance:ticket_paid:${reqId}`, (data) => {

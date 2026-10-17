@@ -248,6 +248,10 @@ const SOCKET_URL =
   process.env.NEXT_PUBLIC_SOCKET_URL ||
   'https://lastdance.co.ke';
 
+const SOCKET_PATH =
+  process.env.NEXT_PUBLIC_SOCKET_PATH ||
+  '/api/socket.io';
+
 /* =========================================================
    IMAGE URLS
 ========================================================= */
@@ -396,7 +400,10 @@ export default function VoteModal({
 
     // 1. WebSocket real-time push
     try {
-      const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+      const socket = io(SOCKET_URL, {
+        path: SOCKET_PATH,
+        transports: ['websocket', 'polling']
+      });
       socketRef.current = socket;
 
       socket.on(`last_dance:vote_paid:${reqId}`, (data) => {

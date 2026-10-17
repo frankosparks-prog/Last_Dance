@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const Candidate = require('../models/Candidate');
 const TicketPurchase = require('../models/TicketPurchase');
 const VoteTransaction = require('../models/VoteTransaction');
@@ -352,11 +353,11 @@ exports.checkPaymentStatus = async (req, res) => {
                             global.io.emit(`last_dance:vote_paid:${vote.checkoutRequestID}`, {
                                 success: true,
                                 status: 'completed',
-                                candidateId: candidate._id,
+                                candidateId: candidate._id.toString(),
                                 votesCount: vote.votesCount
                             });
                             global.io.emit('last_dance:vote_updated', {
-                                candidateId: candidate._id,
+                                candidateId: candidate._id.toString(),
                                 candidateName: candidate.name,
                                 category: candidate.category,
                                 newVoteCount: candidate.voteCount,
@@ -518,12 +519,12 @@ exports.handlePaymentCallback = async (req, res) => {
                     global.io.emit(`last_dance:vote_paid:${voteTx.checkoutRequestID}`, {
                         success: true,
                         status: 'completed',
-                        candidateId: candidate._id,
+                        candidateId: candidate._id.toString(),
                         votesCount: voteTx.votesCount
                     });
 
                     global.io.emit('last_dance:vote_updated', {
-                        candidateId: candidate._id,
+                        candidateId: candidate._id.toString(),
                         candidateName: candidate.name,
                         category: candidate.category,
                         newVoteCount: candidate.voteCount,
