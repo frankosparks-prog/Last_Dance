@@ -489,11 +489,11 @@ import CandidatesGrid from './CandidatesGrid';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
-  'https://api.lastdance.co.ke/api';
+  'https://lastdance.co.ke/api';
 
 const SOCKET_URL =
   process.env.NEXT_PUBLIC_SOCKET_URL ||
-  'https://api.lastdance.co.ke';
+  'https://lastdance.co.ke';
 
 const DEFAULT_CATEGORIES = [
   'Mr & Miss Last Dance',
