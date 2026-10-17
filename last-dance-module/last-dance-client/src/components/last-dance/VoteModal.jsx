@@ -242,11 +242,11 @@ import { io } from 'socket.io-client';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:5000/api';
+  'https://lastdance.co.ke/api';
 
 const SOCKET_URL =
   process.env.NEXT_PUBLIC_SOCKET_URL ||
-  'http://localhost:5000';
+  'https://lastdance.co.ke';
 
 /* =========================================================
    IMAGE URLS
@@ -330,6 +330,7 @@ export default function VoteModal({
   const [errorMessage, setErrorMessage] = useState('');
   const [checkoutRequestID, setCheckoutRequestID] = useState('');
   const [pollCountdown, setPollCountdown] = useState(90);
+  const [isVerifyingManually, setIsVerifyingManually] = useState(false);
 
   const pollIntervalRef = useRef(null);
   const socketRef = useRef(null);
@@ -354,6 +355,7 @@ export default function VoteModal({
     stopPolling();
     setPaymentStage('confirmed');
     setErrorMessage('');
+    setIsVerifyingManually(false);
     if (onSuccess) {
       onSuccess();
     }
@@ -363,6 +365,28 @@ export default function VoteModal({
     stopPolling();
     setPaymentStage('failed');
     setErrorMessage(msg || 'Payment was cancelled or failed on your mobile device. Please try again.');
+    setIsVerifyingManually(false);
+  };
+
+  const checkStatusManually = async () => {
+    if (!checkoutRequestID || isVerifyingManually) return;
+    setIsVerifyingManually(true);
+    setErrorMessage('');
+
+    try {
+      const res = await axios.get(`${API_BASE_URL}/last-dance/payment-status/${checkoutRequestID}`);
+      if (res.data?.success && res.data.status === 'completed') {
+        handlePaymentSuccess();
+      } else if (res.data?.status === 'failed') {
+        handlePaymentFailure('Payment was cancelled or failed on your mobile device.');
+      } else {
+        setErrorMessage('Vote payment is still awaiting confirmation from M-Pesa. If you have entered your PIN, please wait a moment and tap verify again.');
+      }
+    } catch (err) {
+      setErrorMessage('Could not query payment status right now. Please ensure you entered your PIN and tap Verify again.');
+    } finally {
+      setIsVerifyingManually(false);
+    }
   };
 
   const startPollingPayment = (reqId) => {
@@ -388,27 +412,34 @@ export default function VoteModal({
       console.warn('[LastDance] WebSocket error:', wsErr.message);
     }
 
-    // 2. HTTP polling every 2.5s
+    // 2. High-frequency 2-second HTTP polling with in-flight lock
+    let inFlight = false;
     pollIntervalRef.current = setInterval(async () => {
-      seconds -= 2.5;
+      seconds -= 2;
       setPollCountdown(Math.max(0, Math.round(seconds)));
 
-      if (seconds <= 0) {
-        stopPolling();
-        return;
-      }
+      if (inFlight) return;
+      inFlight = true;
 
       try {
         const res = await axios.get(`${API_BASE_URL}/last-dance/payment-status/${reqId}`);
         if (res.data?.success && res.data.status === 'completed') {
           handlePaymentSuccess();
+          return;
         } else if (res.data?.status === 'failed') {
           handlePaymentFailure('Payment was cancelled or failed on your device.');
+          return;
         }
       } catch (err) {
         // Continue polling until countdown expires
+      } finally {
+        inFlight = false;
       }
-    }, 2500);
+
+      if (seconds <= 0) {
+        stopPolling();
+      }
+    }, 2000);
   };
 
   const resetForm = () => {
@@ -416,6 +447,7 @@ export default function VoteModal({
     setPaymentStage('idle');
     setErrorMessage('');
     setCheckoutRequestID('');
+    setIsVerifyingManually(false);
   };
 
   /* =======================================================
@@ -836,18 +868,47 @@ export default function VoteModal({
                 </div>
               </div>
 
+              {errorMessage && (
+                <div className="mt-3 border-l-2 border-amber-500 bg-amber-50 px-3.5 py-2.5 text-[12px] leading-[1.5] text-amber-800 rounded-r-lg">
+                  {errorMessage}
+                </div>
+              )}
+
               <div className="mt-4 flex items-center justify-between border-t border-black/10 pt-3 text-[12px] text-black/50">
                 <div className="flex items-center gap-2">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#762e99]" />
-                  <span>Verifying vote payment ({pollCountdown}s)</span>
+                  <RefreshCw className={`w-3.5 h-3.5 ${pollCountdown > 0 ? 'animate-spin' : ''} text-[#762e99]`} />
+                  <span>
+                    {pollCountdown > 0 
+                      ? `Verifying vote payment (${pollCountdown}s)`
+                      : 'Waiting for network confirmation...'}
+                  </span>
                 </div>
               </div>
 
-              <div className="mt-5">
+              <div className="mt-4 space-y-2.5">
+                <button
+                  type="button"
+                  onClick={checkStatusManually}
+                  disabled={isVerifyingManually}
+                  className="w-full rounded-full bg-gradient-to-r from-[#5e2590] to-[#762e99] py-3 px-4 text-[13px] font-medium text-white shadow-md hover:opacity-95 transition active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isVerifyingManually ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Checking with M-Pesa / PayHero...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      I have entered my PIN — Verify Vote
+                    </>
+                  )}
+                </button>
+
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="w-full rounded-full border border-black/15 py-3 text-[13px] font-medium text-black hover:bg-black/5 transition"
+                  className="w-full rounded-full border border-black/15 py-2.5 text-[12.5px] font-medium text-black hover:bg-black/5 transition"
                 >
                   Cancel / Change Number
                 </button>

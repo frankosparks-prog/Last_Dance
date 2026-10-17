@@ -17,6 +17,7 @@ const CandidatesGrid = ({
   selectedCategory,
   rankOffset,
   copiedId,
+  highlightedId,
   onShare,
   onVote,
 }) => {
@@ -176,12 +177,15 @@ const CandidatesGrid = ({
                   rankOffset +
                     index;
 
+                const isHighlighted = highlightedId === candidate._id;
+
                 return (
                   <article
                     key={
                       candidate._id
                     }
-                    className="
+                    id={`nominee-${candidate._id}`}
+                    className={`
                       group
                       overflow-hidden
                       border
@@ -192,7 +196,8 @@ const CandidatesGrid = ({
 
                       hover:-translate-y-1
                       hover:shadow-[0_16px_35px_rgba(0,0,0,0.06)]
-                    "
+                      ${isHighlighted ? 'ring-2 ring-[#ff914d] ring-offset-2 shadow-xl' : ''}
+                    `}
                   >
                     {/* Image */}
 

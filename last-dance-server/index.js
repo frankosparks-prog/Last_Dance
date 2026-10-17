@@ -37,8 +37,8 @@ io.on('connection', (socket) => {
   });
 });
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
+// Health check endpoint (handles both /api/health and /health if /api is stripped by reverse proxy)
+app.get(['/api/health', '/health'], (req, res) => {
   res.json({
     status: 'online',
     service: 'Last Dance Module Server',
@@ -47,8 +47,15 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Main API Routes
-app.use('/api/last-dance', lastDanceRoutes);
+// PayHero & M-Pesa direct callback handler catch-all
+const lastDanceController = require('./controllers/lastDanceController');
+app.post(
+  ['/api/payhero/callback', '/payhero/callback', '/api/last-dance/callback', '/last-dance/callback', '/callback'],
+  lastDanceController.handlePaymentCallback
+);
+
+// Main API Routes (mounted on both prefixes so requests with or without /api prefix work)
+app.use(['/api/last-dance', '/last-dance'], lastDanceRoutes);
 
 // Database connection & Seed Mock Test Data
 const PORT = process.env.PORT || 5001;

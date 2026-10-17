@@ -418,6 +418,7 @@ const PRESET_AVATARS = [
 
 const INITIAL_FORM = {
   name: '',
+  phoneNumber: '',
   photoUrl:
     PRESET_AVATARS[0].url,
   oneLiner: '',
@@ -1203,6 +1204,39 @@ export default function CandidateRegisterPage() {
 
                         focus:border-[#762e99]
                       "
+                    />
+                  </div>
+
+                  {/* =====================================
+                      PHONE NUMBER (ADMIN ONLY)
+                  ====================================== */}
+                  <div className="mt-6">
+                    <div className="flex items-center justify-between">
+                      <label
+                        htmlFor="candidate-phone"
+                        className="block text-[13px] font-medium text-black"
+                      >
+                        Nominee phone number
+                      </label>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#762e99] bg-[#762e99]/10 px-2 py-0.5 rounded-full">
+                        🔒 Admin only
+                      </span>
+                    </div>
+
+                    <p className="mt-1 text-[11px] text-black/45">
+                      Required so festival coordinators can reach out for awards and logistics. Kept private from the public leaderboard.
+                    </p>
+
+                    <input
+                      id="candidate-phone"
+                      type="tel"
+                      required
+                      placeholder="e.g. 0712 345 678 or +254..."
+                      value={form.phoneNumber}
+                      onChange={(event) =>
+                        updateForm('phoneNumber', event.target.value)
+                      }
+                      className="mt-2 w-full border border-black/15 bg-white px-4 py-3.5 text-[14px] font-normal text-black outline-none transition-colors placeholder:text-black/30 focus:border-[#762e99]"
                     />
                   </div>
 

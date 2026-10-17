@@ -526,6 +526,31 @@ export default function LeaderboardExperience() {
   const [copiedId, setCopiedId] =
     useState(null);
 
+  const [highlightedNomineeId, setHighlightedNomineeId] =
+    useState(null);
+
+  // =============================================
+  // SYNC FROM URL QUERY PARAMS (?category=... & ?nominee=...)
+  // =============================================
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const categoryFromUrl = urlParams.get('category');
+    const nomineeFromUrl = urlParams.get('nominee');
+    const hashNominee = window.location.hash?.replace('#nominee-', '');
+
+    if (categoryFromUrl && categoryFromUrl.trim()) {
+      setSelectedCategory(categoryFromUrl.trim());
+    }
+
+    const targetNomineeId = nomineeFromUrl || hashNominee;
+    if (targetNomineeId) {
+      setHighlightedNomineeId(targetNomineeId);
+    }
+  }, []);
+
   // =============================================
   // FETCH CANDIDATES
   // =============================================
@@ -640,6 +665,30 @@ export default function LeaderboardExperience() {
   }, []);
 
   // =============================================
+  // AUTO-SCROLL TO NOMINEE WHEN LINK HAS NOMINEE ID
+  // =============================================
+
+  useEffect(() => {
+    if (!highlightedNomineeId || loading || candidates.length === 0) return;
+
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`nominee-${highlightedNomineeId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 400);
+
+    const clearTimer = setTimeout(() => {
+      setHighlightedNomineeId(null);
+    }, 4500);
+
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(clearTimer);
+    };
+  }, [highlightedNomineeId, loading, candidates]);
+
+  // =============================================
   // SHARE CANDIDATE
   // =============================================
 
@@ -647,17 +696,36 @@ export default function LeaderboardExperience() {
     async (candidate) => {
       if (
         typeof window ===
-        'undefined'
+        'undefined' || !candidate
       ) {
         return;
       }
 
-      const shareUrl =
-        `${
-          window.location.origin
-        }/last-dance?category=${encodeURIComponent(
-          candidate?.category || ''
-        )}`;
+      const categoryParam = encodeURIComponent(candidate.category || '');
+      const nomineeParam = encodeURIComponent(candidate._id || '');
+      const shareUrl = `${window.location.origin}/last-dance?category=${categoryParam}&nominee=${nomineeParam}#nominee-${candidate._id}`;
+
+      const shareData = {
+        title: `Vote for ${candidate.name} - Last Dance 2026`,
+        text: `Vote for ${candidate.name} in category "${candidate.category}" on the Last Dance Awards leaderboard!`,
+        url: shareUrl,
+      };
+
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.share &&
+        navigator.canShare &&
+        navigator.canShare(shareData)
+      ) {
+        try {
+          await navigator.share(shareData);
+          setCopiedId(candidate._id);
+          window.setTimeout(() => setCopiedId(null), 2500);
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
 
       try {
         await navigator.clipboard.writeText(
@@ -900,6 +968,9 @@ export default function LeaderboardExperience() {
                 copiedId={
                   copiedId
                 }
+                highlightedId={
+                  highlightedNomineeId
+                }
                 onShare={
                   handleShareCandidate
                 }
@@ -932,6 +1003,9 @@ export default function LeaderboardExperience() {
             }
             copiedId={
               copiedId
+            }
+            highlightedId={
+              highlightedNomineeId
             }
             onShare={
               handleShareCandidate

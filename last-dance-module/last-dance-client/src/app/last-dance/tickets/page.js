@@ -1735,11 +1735,11 @@ import { CheckCircle2, Clock, AlertCircle, RefreshCw, Download, ShieldCheck } fr
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:5000/api';
+  'https://lastdance.co.ke/api';
 
 const SOCKET_URL =
   process.env.NEXT_PUBLIC_SOCKET_URL ||
-  'http://localhost:5000';
+  'https://lastdance.co.ke';
 
 /* =========================================================
    IMAGE URLS
@@ -2030,6 +2030,7 @@ export default function TicketsPage() {
   const [checkoutRequestID, setCheckoutRequestID] = useState('');
   const [confirmedTicket, setConfirmedTicket] = useState(null);
   const [pollCountdown, setPollCountdown] = useState(90);
+  const [isVerifyingManually, setIsVerifyingManually] = useState(false);
 
   const pollIntervalRef = useRef(null);
   const socketRef = useRef(null);
@@ -2055,12 +2056,36 @@ export default function TicketsPage() {
     setConfirmedTicket(ticketDetails);
     setPaymentStage('confirmed');
     setErrorMessage('');
+    setIsVerifyingManually(false);
   };
 
   const handlePaymentFailure = (msg) => {
     stopPolling();
     setPaymentStage('failed');
     setErrorMessage(msg || 'Payment was cancelled or failed on your mobile device. Please try again.');
+    setIsVerifyingManually(false);
+  };
+
+  // Manual payment verification trigger (e.g. if countdown ended or user already entered PIN)
+  const checkStatusManually = async () => {
+    if (!checkoutRequestID || isVerifyingManually) return;
+    setIsVerifyingManually(true);
+    setErrorMessage('');
+
+    try {
+      const res = await axios.get(`${API_BASE_URL}/last-dance/payment-status/${checkoutRequestID}`);
+      if (res.data?.success && res.data.status === 'completed') {
+        handlePaymentSuccess(res.data.details);
+      } else if (res.data?.status === 'failed') {
+        handlePaymentFailure('Payment was cancelled or failed on your mobile device.');
+      } else {
+        setErrorMessage('Payment is still awaiting confirmation from M-Pesa. If you have keyed in your PIN, please give it a few seconds and tap verify again.');
+      }
+    } catch (err) {
+      setErrorMessage('Could not query payment gateway. Please ensure you authorized the M-Pesa prompt and tap Verify again.');
+    } finally {
+      setIsVerifyingManually(false);
+    }
   };
 
   const startPollingPayment = (reqId) => {
@@ -2086,27 +2111,34 @@ export default function TicketsPage() {
       console.warn('[LastDance] WebSocket error:', wsErr.message);
     }
 
-    // 2. Fallback polling every 2.5s
+    // 2. High-frequency 2-second HTTP polling with in-flight lock
+    let inFlight = false;
     pollIntervalRef.current = setInterval(async () => {
-      seconds -= 2.5;
+      seconds -= 2;
       setPollCountdown(Math.max(0, Math.round(seconds)));
 
-      if (seconds <= 0) {
-        stopPolling();
-        return;
-      }
+      if (inFlight) return;
+      inFlight = true;
 
       try {
         const res = await axios.get(`${API_BASE_URL}/last-dance/payment-status/${reqId}`);
         if (res.data?.success && res.data.status === 'completed') {
           handlePaymentSuccess(res.data.details);
+          return;
         } else if (res.data?.status === 'failed') {
-          handlePaymentFailure('Payment was cancelled or failed on your device.');
+          handlePaymentFailure('Payment was cancelled or failed on your mobile device.');
+          return;
         }
       } catch (err) {
         // Continue polling until countdown expires
+      } finally {
+        inFlight = false;
       }
-    }, 2500);
+
+      if (seconds <= 0) {
+        stopPolling();
+      }
+    }, 2000);
   };
 
   /* =======================================================
@@ -2473,7 +2505,7 @@ export default function TicketsPage() {
 
                     <div className="mt-7 flex flex-col gap-3">
                       <a
-                        href={`http://localhost:5000/api/last-dance/tickets/${confirmedTicket?._id || confirmedTicket?.ticketId}/pass`}
+                        href={`${API_BASE_URL}/last-dance/tickets/${confirmedTicket?._id || confirmedTicket?.ticketId}/pass`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center justify-center gap-2 w-full rounded-full bg-gradient-to-r from-[#5e2590] to-[#762e99] px-5 py-4 text-[14px] font-medium text-white shadow-md hover:opacity-90 transition-all active:scale-[0.99]"
@@ -2524,14 +2556,43 @@ export default function TicketsPage() {
                       </div>
                     </div>
 
+                    {errorMessage && (
+                      <div className="mt-4 border-l-2 border-amber-500 bg-amber-50 px-4 py-3 text-[13px] leading-[1.5] text-amber-800 rounded-r-lg">
+                        {errorMessage}
+                      </div>
+                    )}
+
                     <div className="mt-5 flex items-center justify-between border-t border-black/10 pt-4 text-[12px] text-black/50">
                       <div className="flex items-center gap-2">
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#762e99]" />
-                        <span>Verifying payment with M-Pesa ({pollCountdown}s)</span>
+                        <RefreshCw className={`w-3.5 h-3.5 ${pollCountdown > 0 ? 'animate-spin' : ''} text-[#762e99]`} />
+                        <span>
+                          {pollCountdown > 0 
+                            ? `Verifying payment with M-Pesa (${pollCountdown}s)` 
+                            : 'Waiting for network confirmation...'}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="mt-6">
+                    <div className="mt-5 space-y-3">
+                      <button
+                        type="button"
+                        onClick={checkStatusManually}
+                        disabled={isVerifyingManually}
+                        className="w-full rounded-full bg-gradient-to-r from-[#5e2590] to-[#762e99] py-3.5 px-4 text-[13px] font-medium text-white shadow-md hover:opacity-95 transition active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {isVerifyingManually ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            Checking with M-Pesa / PayHero...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            I have entered my PIN — Verify Payment
+                          </>
+                        )}
+                      </button>
+
                       <button
                         type="button"
                         onClick={resetForm}

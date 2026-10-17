@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   UserPlus, CheckCircle2, Edit, Trash2, Search, Plus, 
-  XCircle, Sparkles, Filter, RefreshCw
+  XCircle, Sparkles, Filter, RefreshCw, Phone
 } from 'lucide-react';
 import axios from 'axios';
 import CloudinaryImageUpload from '@/components/last-dance/CloudinaryImageUpload';
@@ -113,6 +113,7 @@ export default function AdminNomineesPage() {
       name: '',
       photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=85',
       category: 'Mr & Miss Last Dance',
+      phoneNumber: '',
       oneLiner: '',
       pitch: '',
       voteCount: 0,
@@ -127,6 +128,7 @@ export default function AdminNomineesPage() {
       name: candidate.name || '',
       photoUrl: candidate.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=85',
       category: candidate.category || 'Mr & Miss Last Dance',
+      phoneNumber: candidate.phoneNumber || candidate.phone || '',
       oneLiner: candidate.oneLiner || '',
       pitch: candidate.pitch || '',
       voteCount: candidate.voteCount || 0,
@@ -298,6 +300,17 @@ export default function AdminNomineesPage() {
                         <div className="truncate max-w-xs sm:max-w-sm">
                           <p className="font-medium text-black text-[14px] truncate">{c.name}</p>
                           <p className="text-[12px] text-black/50 italic truncate">"{c.oneLiner}"</p>
+                          {(c.phoneNumber || c.phone) ? (
+                            <a 
+                              href={`tel:${c.phoneNumber || c.phone}`}
+                              className="inline-flex items-center gap-1 text-[11px] font-mono text-[#ff914d] hover:underline mt-0.5"
+                              title="Click to call nominee"
+                            >
+                              <Phone className="w-3 h-3" /> {c.phoneNumber || c.phone}
+                            </a>
+                          ) : (
+                            <span className="text-[11px] text-black/30 italic block mt-0.5">No phone</span>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -400,6 +413,19 @@ export default function AdminNomineesPage() {
                   value={candidateForm.name}
                   onChange={(e) => setCandidateForm(prev => ({ ...prev, name: e.target.value }))}
                   className="w-full border border-black/15 bg-white px-3.5 py-2.5 text-[14px] text-black outline-none rounded-xl focus:border-[#762e99] transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium uppercase tracking-wider text-black/70 mb-1">
+                  Nominee Phone Number (Admin Contact)
+                </label>
+                <input
+                  type="tel"
+                  placeholder="e.g. 0712 345 678"
+                  value={candidateForm.phoneNumber || ''}
+                  onChange={(e) => setCandidateForm(prev => ({ ...prev, phoneNumber: e.target.value }))}
+                  className="w-full border border-black/15 bg-white px-3.5 py-2.5 text-[14px] text-black outline-none rounded-xl focus:border-[#762e99] transition font-mono"
                 />
               </div>
 

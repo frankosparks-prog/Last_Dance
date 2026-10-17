@@ -13,6 +13,7 @@ const TrendingPodium = ({
   candidates,
   selectedCategory,
   copiedId,
+  highlightedId,
   onShare,
   onVote,
 }) => {
@@ -97,19 +98,24 @@ const TrendingPodium = ({
             const first =
               rank === 1;
 
+            const isHighlighted = highlightedId === candidate._id;
+
             return (
               <article
                 key={
                   candidate._id
                 }
+                id={`nominee-${candidate._id}`}
                 className={`
                   relative
                   overflow-hidden
                   bg-white
-                  transition-transform
+                  transition-all
                   duration-300
 
                   hover:-translate-y-1
+
+                  ${isHighlighted ? 'ring-2 ring-[#ff914d] ring-offset-2 shadow-xl' : ''}
 
                   ${
                     first

@@ -47,6 +47,11 @@ const CandidateSchema = new mongoose.Schema({
         default: 0,
         index: true
     },
+    phoneNumber: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     registrationDate: {
         type: Date,
         default: Date.now

@@ -204,7 +204,18 @@ export default function AdminOverviewPage() {
                     />
                     <div className="truncate">
                       <p className="text-[13px] font-medium text-black truncate">{c.name}</p>
-                      <p className="text-[11px] text-black/45 truncate">{c.category}</p>
+                      <p className="text-[11px] text-black/45 truncate">
+                        {c.category}
+                        {(c.phoneNumber || c.phone) && (
+                          <a 
+                            href={`tel:${c.phoneNumber || c.phone}`} 
+                            className="ml-2 font-mono text-[#ff914d] hover:underline"
+                            title="Call nominee"
+                          >
+                            &bull; {c.phoneNumber || c.phone}
+                          </a>
+                        )}
+                      </p>
                     </div>
                   </div>
                   <span className="text-[11px] font-medium uppercase tracking-wider text-[#ff914d] bg-[#ff914d]/10 px-2 py-0.5 rounded-full shrink-0">

@@ -93,8 +93,12 @@ exports.getCandidates = async (req, res) => {
             const leaderVotes = categoryLeaders[c.category] || 0;
             const votesToOvertake = index === 0 || c.voteCount === leaderVotes ? 0 : (leaderVotes - c.voteCount + 1);
 
+            const candObj = c.toObject();
+            delete candObj.phoneNumber;
+            delete candObj.phone;
+
             return {
-                ...c.toObject(),
+                ...candObj,
                 rank: index + 1,
                 votesToOvertake
             };
@@ -119,7 +123,7 @@ exports.registerCandidate = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Registration is currently closed.' });
         }
 
-        const { name, photoUrl, oneLiner, pitch, category } = req.body;
+        const { name, photoUrl, oneLiner, pitch, category, phoneNumber, phone } = req.body;
 
         if (!name || !photoUrl || !oneLiner || !pitch || !category) {
             return res.status(400).json({ success: false, message: 'All profile fields are required.' });
@@ -130,11 +134,12 @@ exports.registerCandidate = async (req, res) => {
         }
 
         const newCandidate = await Candidate.create({
-            name,
-            photoUrl,
-            oneLiner,
-            pitch,
+            name: name.trim(),
+            photoUrl: photoUrl.trim(),
+            oneLiner: oneLiner.trim(),
+            pitch: pitch.trim(),
             category,
+            phoneNumber: (phoneNumber || phone || '').trim(),
             isApproved: false,
             voteCount: 0
         });
@@ -264,13 +269,18 @@ exports.checkPaymentStatus = async (req, res) => {
     try {
         const { checkoutRequestID } = req.params;
 
-        const ticket = await TicketPurchase.findOne({ checkoutRequestID });
+        const isMongoId = mongoose.isValidObjectId(checkoutRequestID);
+        const query = isMongoId
+            ? { $or: [{ checkoutRequestID }, { _id: checkoutRequestID }] }
+            : { checkoutRequestID };
+
+        const ticket = await TicketPurchase.findOne(query);
         if (ticket) {
             // If still pending, attempt a live reconciliation check with PayHero transactions
             if (ticket.status === 'pending') {
                 try {
                     const paymentGatewayService = require('../services/paymentGatewayService');
-                    const confirmedTx = await paymentGatewayService.checkPayHeroTransaction(checkoutRequestID, ticket.buyerPhone, ticket.totalAmountKES);
+                    const confirmedTx = await paymentGatewayService.checkPayHeroTransaction(ticket.checkoutRequestID || checkoutRequestID, ticket.buyerPhone, ticket.totalAmountKES);
                     if (confirmedTx && confirmedTx.success && confirmedTx.mpesaReceiptNumber) {
                         console.log(`[LastDance] Reconciled pending ticket order ${ticket._id} via gateway query: ${confirmedTx.mpesaReceiptNumber}`);
                         ticket.status = 'completed';
@@ -321,7 +331,7 @@ exports.checkPaymentStatus = async (req, res) => {
             return res.json({ success: true, type: 'ticket', status: ticket.status, details: ticket });
         }
 
-        const vote = await VoteTransaction.findOne({ checkoutRequestID }).populate('candidate');
+        const vote = await VoteTransaction.findOne(query).populate('candidate');
         if (vote) {
             if (vote.status === 'pending') {
                 try {
@@ -619,7 +629,7 @@ exports.adminApproveCandidate = async (req, res) => {
 exports.adminUpdateCandidate = async (req, res) => {
     try {
         const { candidateId } = req.params;
-        const { name, photoUrl, oneLiner, pitch, category, voteCount } = req.body;
+        const { name, photoUrl, oneLiner, pitch, category, voteCount, phoneNumber, phone } = req.body;
 
         const candidate = await Candidate.findById(candidateId);
         if (!candidate) {
@@ -631,6 +641,7 @@ exports.adminUpdateCandidate = async (req, res) => {
         if (oneLiner) candidate.oneLiner = oneLiner;
         if (pitch) candidate.pitch = pitch;
         if (category) candidate.category = category;
+        if (phoneNumber !== undefined || phone !== undefined) candidate.phoneNumber = (phoneNumber || phone || '').trim();
         if (typeof voteCount === 'number' && voteCount >= 0) candidate.voteCount = voteCount;
 
         await candidate.save();
@@ -806,18 +817,19 @@ exports.adminLogin = async (req, res) => {
 // 17. Admin Create Candidate
 exports.adminCreateCandidate = async (req, res) => {
     try {
-        const { name, photoUrl, oneLiner, pitch, category, isApproved, voteCount } = req.body;
+        const { name, photoUrl, oneLiner, pitch, category, isApproved, voteCount, phoneNumber, phone } = req.body;
 
         if (!name || !photoUrl || !oneLiner || !pitch || !category) {
             return res.status(400).json({ success: false, message: 'All candidate fields are required.' });
         }
 
         const candidate = await Candidate.create({
-            name,
-            photoUrl,
-            oneLiner,
-            pitch,
+            name: name.trim(),
+            photoUrl: photoUrl.trim(),
+            oneLiner: oneLiner.trim(),
+            pitch: pitch.trim(),
             category,
+            phoneNumber: (phoneNumber || phone || '').trim(),
             isApproved: isApproved !== undefined ? isApproved : true,
             voteCount: voteCount || 0
         });
