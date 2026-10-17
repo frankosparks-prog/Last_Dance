@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { 
   Ticket, Search, RefreshCw, Mail, CheckCircle2, 
   Clock, ExternalLink, Download, AlertCircle, Send,
-  ChevronRight, Filter, Eye, X
+  ChevronRight, Filter, Eye, X, DollarSign
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -13,6 +14,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/a
 export default function AdminTicketsPage() {
   const [tickets, setTickets] = useState([]);
   const [stats, setStats] = useState(null);
+  const [ticketPriceKES, setTicketPriceKES] = useState(500);
   const [loading, setLoading] = useState(true);
   const [resendingId, setResendingId] = useState(null);
   const [actionMessage, setActionMessage] = useState({ type: '', text: '' });
@@ -26,13 +28,19 @@ export default function AdminTicketsPage() {
     setLoading(true);
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || 'admin-token' : 'admin-token';
-      const res = await axios.get(`${API_BASE_URL}/last-dance/admin/tickets`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const [res, setRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/last-dance/admin/tickets`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API_BASE_URL}/last-dance/settings`).catch(() => ({ data: {} }))
+      ]);
 
       if (res.data?.success) {
         setTickets(res.data.tickets || []);
         setStats(res.data.stats || null);
+      }
+      if (setRes.data?.success && setRes.data.settings?.ticketPriceKES) {
+        setTicketPriceKES(Number(setRes.data.settings.ticketPriceKES));
       }
     } catch (err) {
       console.error('Failed to fetch tickets:', err);
@@ -132,14 +140,26 @@ export default function AdminTicketsPage() {
           </p>
         </div>
 
-        <button
-          onClick={fetchTickets}
-          disabled={loading}
-          className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-full border border-black/15 bg-white text-black hover:bg-black/5 text-[12px] font-medium transition self-start sm:self-auto"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh tickets</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-3 self-start sm:self-auto">
+          <Link
+            href="/last-dance/admin/settings"
+            title="Edit ticket price in Settings"
+            className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-full border border-[#762e99]/20 bg-[#762e99]/5 text-[#762e99] hover:bg-[#762e99]/10 text-[12px] font-medium transition"
+          >
+            <DollarSign className="w-3.5 h-3.5" />
+            <span>Ticket Price: <strong>KES {ticketPriceKES.toLocaleString()}</strong></span>
+            <span className="text-[10px] font-bold uppercase underline ml-1">Edit in Settings</span>
+          </Link>
+
+          <button
+            onClick={fetchTickets}
+            disabled={loading}
+            className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-full border border-black/15 bg-white text-black hover:bg-black/5 text-[12px] font-medium transition"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh tickets</span>
+          </button>
+        </div>
       </div>
 
       {/* 3 Metric Cards */}

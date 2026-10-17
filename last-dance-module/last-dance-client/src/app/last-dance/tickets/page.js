@@ -2025,8 +2025,54 @@ export default function TicketsPage() {
       quantity: 1,
     });
 
-  const ticketPriceKES = 500;
+  const [ticketPriceKES, setTicketPriceKES] = useState(500);
   const totalAmountKES = form.quantity * ticketPriceKES;
+
+  // Fetch live ticket price from admin settings & sync via WebSocket
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchSettings = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/last-dance/settings`);
+        if (res.data?.success && res.data.settings?.ticketPriceKES) {
+          if (isMounted) {
+            setTicketPriceKES(Number(res.data.settings.ticketPriceKES));
+          }
+        }
+      } catch (err) {
+        console.warn('[TicketsPage] Could not load live ticket price, defaulting to 500:', err.message);
+      }
+    };
+
+    fetchSettings();
+
+    try {
+      const socket = io(SOCKET_URL, {
+        path: SOCKET_PATH,
+        transports: ['websocket', 'polling']
+      });
+
+      socket.on('last_dance:settings_updated', (data) => {
+        if (data && data.ticketPriceKES && Number(data.ticketPriceKES) > 0) {
+          console.log('[TicketsPage] Real-time ticket price updated by admin:', data.ticketPriceKES);
+          if (isMounted) {
+            setTicketPriceKES(Number(data.ticketPriceKES));
+          }
+        }
+      });
+
+      return () => {
+        isMounted = false;
+        socket.off('last_dance:settings_updated');
+        socket.disconnect();
+      };
+    } catch (wsErr) {
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, []);
 
   // 'idle' | 'initiating' | 'awaiting_pin' | 'confirmed' | 'failed'
   const [paymentStage, setPaymentStage] = useState('idle');

@@ -57,6 +57,17 @@ exports.updateSettings = async (req, res) => {
         if (Array.isArray(votePackages)) settings.votePackages = votePackages;
 
         await settings.save();
+
+        if (global.io) {
+            global.io.emit('last_dance:settings_updated', {
+                ticketPriceKES: settings.ticketPriceKES,
+                enabled: settings.enabled,
+                eventTitle: settings.eventTitle,
+                eventDate: settings.eventDate,
+                votePackages: settings.votePackages
+            });
+        }
+
         res.json({ success: true, settings, message: 'Last Dance settings updated successfully' });
     } catch (err) {
         console.error('[LastDance] updateSettings error:', err);

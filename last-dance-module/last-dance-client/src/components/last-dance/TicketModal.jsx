@@ -245,9 +245,10 @@ const MPESA_SECURE_IMAGE =
 ========================================================= */
 
 export default function TicketModal({
-  ticketPriceKES = 500,
+  ticketPriceKES: initialTicketPrice = 500,
   onClose,
 }) {
+  const [ticketPriceKES, setTicketPriceKES] = useState(initialTicketPrice);
   const [form, setForm] =
     useState({
       name: '',
@@ -266,6 +267,51 @@ export default function TicketModal({
 
   const pollIntervalRef = useRef(null);
   const socketRef = useRef(null);
+
+  // Fetch live ticket price from admin settings & sync via WebSocket
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchSettings = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/last-dance/settings`);
+        if (res.data?.success && res.data.settings?.ticketPriceKES) {
+          if (isMounted) {
+            setTicketPriceKES(Number(res.data.settings.ticketPriceKES));
+          }
+        }
+      } catch (err) {
+        // Fallback to initial prop
+      }
+    };
+
+    fetchSettings();
+
+    try {
+      const socket = io(SOCKET_URL, {
+        path: SOCKET_PATH,
+        transports: ['websocket', 'polling']
+      });
+
+      socket.on('last_dance:settings_updated', (data) => {
+        if (data && data.ticketPriceKES && Number(data.ticketPriceKES) > 0) {
+          if (isMounted) {
+            setTicketPriceKES(Number(data.ticketPriceKES));
+          }
+        }
+      });
+
+      return () => {
+        isMounted = false;
+        socket.off('last_dance:settings_updated');
+        socket.disconnect();
+      };
+    } catch (wsErr) {
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, []);
 
   const totalAmountKES =
     form.quantity *
