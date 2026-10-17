@@ -524,8 +524,8 @@ function generateLastDanceTicketHtml({ ticketOrder = {}, isResend = false, serve
                         <span style="font-weight: 500; font-size: 12px; color: #64748b;">Doors open at 18:00</span>
                       </td>
                       <td style="padding-bottom: 16px; font-weight: 700; color: #0f172a; font-size: 13px;">
-                        Pavilion Arena<br>
-                        <span style="font-weight: 500; font-size: 12px; color: #64748b;">Main Campus Grounds</span>
+                        Crowns Bar and Restaurant<br>
+                        <span style="font-weight: 500; font-size: 12px; color: #64748b;">Main Campus Gate</span>
                       </td>
                     </tr>
                     <tr>
@@ -667,7 +667,7 @@ function generateStandalonePrintableTicketHtml({ ticketOrder = {}, serverUrl = '
             </div>
             <div class="meta-item">
               <span class="meta-label">Venue</span>
-              <span class="meta-value">Pavilion Main Arena &bull; Campus</span>
+              <span class="meta-value">Crowns Bar and Restaurant &bull; Gate</span>
             </div>
             <div class="meta-item">
               <span class="meta-label">M-Pesa Receipt</span>

@@ -115,7 +115,8 @@ class PaymentGatewayService {
 
         if (payheroRes.data && (payheroRes.data.status === 'Success' || payheroRes.data.success || payheroRes.data.reference)) {
           return {
-            CheckoutRequestID: payheroRes.data.reference || payheroRes.data.CheckoutRequestID || checkoutRequestID,
+            CheckoutRequestID: checkoutRequestID,
+            payheroReference: payheroRes.data.reference || '',
             ResponseCode: '0',
             CustomerMessage: payheroRes.data.message || `STK push prompt sent via PayHero to ${cleanPhone}.`,
             gateway: 'payhero'
@@ -137,13 +138,12 @@ class PaymentGatewayService {
   }
 
   /**
-   * Verify if a pending transaction was completed on PayHero
+   * Verify if a pending transaction was completed on PayHero by reference
    * @param {string} reference (checkoutRequestID or transaction reference)
-   * @param {string} [phone] (optional buyer/voter phone number for fallback match)
-   * @param {number} [amount] (optional expected amount in KES)
-   * @returns {Promise<{ success: boolean, mpesaReceiptNumber: string, amountPaid: number, transactionReference?: string } | null>}
+   * @returns {Promise<{ success?: boolean, failed?: boolean, reason?: string, mpesaReceiptNumber?: string, amountPaid?: number } | null>}
    */
-  async checkPayHeroTransaction(reference, phone = null, amount = null) {
+  async checkPayHeroTransaction(reference) {
+    if (!reference) return null;
     if (!process.env.PAYHERO_API_KEY && !process.env.BASIC_AUTH_TOKEN) return null;
     try {
       const basicAuth = process.env.BASIC_AUTH_TOKEN || Buffer.from(`${process.env.PAYHERO_API_KEY}:${process.env.PAYHERO_API_SECRET}`).toString('base64');
@@ -153,39 +153,55 @@ class PaymentGatewayService {
         headers: {
           Authorization: formattedAuth
         },
-        timeout: 8000
+        timeout: 6000
       });
 
       const transactions = response.data?.transactions || [];
+      const cleanRef = String(reference).trim();
 
-      // 1. Direct match by transaction_reference or external_reference
-      let match = transactions.find(t => 
-        (t.transaction_reference === reference || t.external_reference === reference) &&
-        t.transaction_type === 'inbound_payment' &&
-        t.provider_reference &&
-        !t.provider_reference.startsWith('cost_')
+      // 1. Direct match by transaction_reference or external_reference ONLY
+      const match = transactions.find(t => 
+        (String(t.transaction_reference || '').trim() === cleanRef || 
+         String(t.external_reference || '').trim() === cleanRef)
       );
 
-      // 2. Fallback match by phone & amount if reference wasn't directly matched
-      if (!match && phone && amount) {
-        const cleanPhone = String(phone).replace(/\+/g, '').replace(/^0/, '254');
-        match = transactions.find(t =>
-          t.transaction_type === 'inbound_payment' &&
-          Number(t.amount) >= Number(amount) &&
-          t.provider_reference &&
-          !t.provider_reference.startsWith('cost_') &&
-          (String(t.description || '').includes(cleanPhone) || String(t.description || '').includes(phone))
-        );
+      // Check if transaction explicitly failed or was cancelled
+      if (match) {
+        const status = String(match.status || '').toLowerCase();
+        if (status === 'failed' || match.ResultCode === 1032) {
+          return {
+            failed: true,
+            reason: match.ResultDesc || 'Request cancelled by user or payment failed'
+          };
+        }
+
+        if (match.transaction_type === 'inbound_payment' && match.provider_reference && !match.provider_reference.startsWith('cost_')) {
+          const receipt = String(match.provider_reference).trim();
+
+          // Idempotency: Verify this receipt has NOT already been claimed by another order!
+          const TicketPurchase = require('../models/TicketPurchase');
+          const VoteTransaction = require('../models/VoteTransaction');
+
+          const [alreadyTicket, alreadyVote] = await Promise.all([
+            TicketPurchase.findOne({ mpesaReceiptNumber: receipt, checkoutRequestID: { $ne: cleanRef } }),
+            VoteTransaction.findOne({ mpesaReceiptNumber: receipt, checkoutRequestID: { $ne: cleanRef } })
+          ]);
+
+          if (alreadyTicket || alreadyVote) {
+            console.warn(`[PaymentGatewayService] Security Alert: Receipt ${receipt} is already claimed by order ${alreadyTicket?._id || alreadyVote?._id}. Rejecting match for ${cleanRef}.`);
+            return null;
+          }
+
+          return {
+            success: true,
+            mpesaReceiptNumber: receipt,
+            amountPaid: Number(match.amount || 0),
+            transactionReference: match.transaction_reference
+          };
+        }
       }
 
-      if (match) {
-        return {
-          success: true,
-          mpesaReceiptNumber: String(match.provider_reference).trim(),
-          amountPaid: Number(match.amount || 0),
-          transactionReference: match.transaction_reference
-        };
-      }
+      // STRICT: Never use fuzzy phone/amount matching. A transaction must be tied strictly to its checkout reference.
       return null;
     } catch (err) {
       console.warn('[PaymentGatewayService] checkPayHeroTransaction warning:', err.message);
@@ -245,19 +261,33 @@ class PaymentGatewayService {
     }
 
     // 2. PayHero Kenya Callback Structure
-    if (body.response || body.status || body.external_reference || body.reference) {
+    if (body.response || body.status || body.external_reference || body.ExternalReference || body.reference) {
       const resp = body.response || body;
       const statusStr = String(resp.status || resp.Status || '').trim().toLowerCase();
-      const isSuccess = statusStr === 'success' || resp.ResultCode === 0 || resp.success === true;
+      const resultCode = resp.ResultCode !== undefined ? Number(resp.ResultCode) : null;
+      const resultDesc = resp.ResultDesc || resp.result_desc || resp.message || '';
+
+      // Check failure conditions explicitly (ResultCode 1032 = Cancelled by user)
+      const isFailed = statusStr === 'failed' || resultCode === 1032 || (resultCode !== null && resultCode !== 0);
+
       const receipt = resp.provider_reference || resp.MpesaReceiptNumber || resp.MpesaCode || resp.mpesa_receipt || resp.mpesa_reference || '';
+      const isSuccess = !isFailed && (statusStr === 'success' || resultCode === 0 || resp.success === true) && !!receipt;
+
+      const extRef = resp.ExternalReference || resp.external_reference || '';
+      const chkId = resp.CheckoutRequestID || resp.checkoutRequestID || resp.reference || '';
+      const merchId = resp.MerchantRequestID || resp.merchantRequestID || '';
+
+      console.log(`[PaymentGatewayService] PayHero Callback parsed: ResultCode=${resultCode}, Status=${statusStr}, Success=${isSuccess}, Receipt=${receipt}, ExtRef=${extRef}, Desc=${resultDesc}`);
 
       return {
-        checkoutRequestID: resp.CheckoutRequestID || resp.external_reference || resp.reference || '',
-        merchantRequestID: resp.MerchantRequestID || resp.CheckoutRequestID || '',
-        externalReference: resp.external_reference || resp.ExternalReference || '',
-        success: isSuccess && !!receipt,
+        checkoutRequestID: extRef || chkId,
+        merchantRequestID: merchId,
+        externalReference: extRef,
+        payheroCheckoutID: chkId,
+        success: isSuccess,
         mpesaReceiptNumber: String(receipt).trim(),
-        amountPaid: Number(resp.Amount || resp.amount || 0)
+        amountPaid: Number(resp.Amount || resp.amount || 0),
+        resultDesc: resultDesc || (isSuccess ? 'Success' : 'Failed')
       };
     }
 

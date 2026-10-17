@@ -288,11 +288,34 @@ exports.checkPaymentStatus = async (req, res) => {
 
         const ticket = await TicketPurchase.findOne(query);
         if (ticket) {
+            if (ticket.status === 'failed') {
+                return res.json({ success: false, type: 'ticket', status: 'failed', message: 'Payment was cancelled or failed on your mobile device.' });
+            }
+
             // If still pending, attempt a live reconciliation check with PayHero transactions
             if (ticket.status === 'pending') {
                 try {
                     const paymentGatewayService = require('../services/paymentGatewayService');
-                    const confirmedTx = await paymentGatewayService.checkPayHeroTransaction(ticket.checkoutRequestID || checkoutRequestID, ticket.buyerPhone, ticket.totalAmountKES);
+                    const confirmedTx = await paymentGatewayService.checkPayHeroTransaction(ticket.checkoutRequestID || checkoutRequestID);
+
+                    if (confirmedTx && confirmedTx.failed) {
+                        console.warn(`[LastDance] Gateway query detected cancelled/failed payment for ticket order ${ticket._id}: ${confirmedTx.reason}`);
+                        ticket.status = 'failed';
+                        ticket.mpesaReceiptNumber = '';
+                        ticket.tickets = [];
+                        await ticket.save();
+
+                        if (global.io) {
+                            global.io.emit(`last_dance:ticket_failed:${ticket.checkoutRequestID}`, {
+                                success: false,
+                                status: 'failed',
+                                message: confirmedTx.reason || 'Payment cancelled or declined on your device.'
+                            });
+                        }
+
+                        return res.json({ success: false, type: 'ticket', status: 'failed', message: confirmedTx.reason || 'Payment cancelled by user.' });
+                    }
+
                     if (confirmedTx && confirmedTx.success && confirmedTx.mpesaReceiptNumber) {
                         console.log(`[LastDance] Reconciled pending ticket order ${ticket._id} via gateway query: ${confirmedTx.mpesaReceiptNumber}`);
                         ticket.status = 'completed';
@@ -345,10 +368,32 @@ exports.checkPaymentStatus = async (req, res) => {
 
         const vote = await VoteTransaction.findOne(query).populate('candidate');
         if (vote) {
+            if (vote.status === 'failed') {
+                return res.json({ success: false, type: 'vote', status: 'failed', message: 'Payment was cancelled or failed on your mobile device.' });
+            }
+
             if (vote.status === 'pending') {
                 try {
                     const paymentGatewayService = require('../services/paymentGatewayService');
-                    const confirmedVote = await paymentGatewayService.checkPayHeroTransaction(checkoutRequestID, vote.voterPhone, vote.amountKES);
+                    const confirmedVote = await paymentGatewayService.checkPayHeroTransaction(vote.checkoutRequestID || checkoutRequestID);
+
+                    if (confirmedVote && confirmedVote.failed) {
+                        console.warn(`[LastDance] Gateway query detected cancelled/failed payment for vote order ${vote._id}: ${confirmedVote.reason}`);
+                        vote.status = 'failed';
+                        vote.mpesaReceiptNumber = '';
+                        await vote.save();
+
+                        if (global.io) {
+                            global.io.emit(`last_dance:vote_failed:${vote.checkoutRequestID}`, {
+                                success: false,
+                                status: 'failed',
+                                message: confirmedVote.reason || 'Payment cancelled or declined on your device.'
+                            });
+                        }
+
+                        return res.json({ success: false, type: 'vote', status: 'failed', message: confirmedVote.reason || 'Payment cancelled by user.' });
+                    }
+
                     if (confirmedVote && confirmedVote.success && confirmedVote.mpesaReceiptNumber) {
                         vote.status = 'completed';
                         vote.mpesaReceiptNumber = confirmedVote.mpesaReceiptNumber;
@@ -410,14 +455,16 @@ exports.handlePaymentCallback = async (req, res) => {
             // Require explicit success and a valid M-Pesa receipt number from the gateway
             if (!success || !mpesaReceiptNumber) {
                 ticketOrder.status = 'failed';
+                ticketOrder.mpesaReceiptNumber = '';
+                ticketOrder.tickets = [];
                 await ticketOrder.save();
-                console.warn(`[LastDance] Ticket order ${ticketOrder._id} payment failed or unverified. Status set to failed.`);
+                console.warn(`[LastDance] Ticket order ${ticketOrder._id} payment cancelled or failed. Status set to failed.`);
 
                 if (global.io) {
                     global.io.emit(`last_dance:ticket_failed:${ticketOrder.checkoutRequestID}`, {
                         success: false,
                         status: 'failed',
-                        message: 'Payment cancelled or declined on your device.'
+                        message: verification.resultDesc || 'Payment cancelled or declined on your device.'
                     });
                 }
                 return res.json({ ResponseCode: '0', ResponseDesc: 'Payment Failed or Unverified' });
@@ -426,6 +473,8 @@ exports.handlePaymentCallback = async (req, res) => {
             // Guard against underpayment if amount is provided
             if (amountPaid > 0 && amountPaid < ticketOrder.totalAmountKES) {
                 ticketOrder.status = 'failed';
+                ticketOrder.mpesaReceiptNumber = '';
+                ticketOrder.tickets = [];
                 await ticketOrder.save();
                 console.warn(`[LastDance] Underpayment detected for ticket order ${ticketOrder._id}: received ${amountPaid}, expected ${ticketOrder.totalAmountKES}.`);
                 return res.json({ ResponseCode: '0', ResponseDesc: 'Underpayment' });
@@ -495,13 +544,14 @@ exports.handlePaymentCallback = async (req, res) => {
         if (voteTx) {
             if (!success || !mpesaReceiptNumber) {
                 voteTx.status = 'failed';
+                voteTx.mpesaReceiptNumber = '';
                 await voteTx.save();
-                console.log(`[LastDance] Vote transaction ${voteTx._id} payment failed.`);
+                console.log(`[LastDance] Vote transaction ${voteTx._id} payment cancelled or failed.`);
                 if (global.io) {
                     global.io.emit(`last_dance:vote_failed:${voteTx.checkoutRequestID}`, {
                         success: false,
                         status: 'failed',
-                        message: 'Payment cancelled or declined on your device.'
+                        message: verification.resultDesc || 'Payment cancelled or declined on your device.'
                     });
                 }
                 return res.json({ ResponseCode: '0', ResponseDesc: 'Success' });
