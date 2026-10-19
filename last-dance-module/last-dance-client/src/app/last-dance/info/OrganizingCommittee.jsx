@@ -21,13 +21,13 @@ const COMMITTEE_MEMBERS = [
       'Overall coordination & leadership',
 
     image:
-      'https://ik.imagekit.io/rhjfaafsm/maxLD.png',
+      'https://ik.imagekit.io/rhjfaafsm/Lastdancedefaultprofile.svg',
   },
 
   {
     id: 2,
 
-    name: 'Joseph Njoroge',
+    name: 'Joe Njoroge',
 
     role: 'Creative Director',
 
@@ -35,7 +35,7 @@ const COMMITTEE_MEMBERS = [
       'Visual direction & guest experience',
 
     image:
-      'https://ik.imagekit.io/rhjfaafsm/joelastdance.png',
+      'https://ik.imagekit.io/rhjfaafsm/Lastdancedefaultprofile.svg',
   },
 
   {

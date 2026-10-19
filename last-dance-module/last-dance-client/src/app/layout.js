@@ -15,7 +15,7 @@ export const metadata = {
   title: "Last Dance",
   description: "Last Dance - 2026",
   icons: {
-    icon: '/LastDanceLogo.png',
+    icon: '/lastdanceicon.png',
   },
 };
 

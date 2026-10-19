@@ -257,7 +257,7 @@ const SOCKET_PATH =
 ========================================================= */
 
 const VOTE_TICKET_IMAGE =
-  'https://ik.imagekit.io/rhjfaafsm/Voteticketlastdance.svg';
+  'https://ik.imagekit.io/rhjfaafsm/finalticketvoteLD.png';
 
 const MPESA_SECURE_IMAGE =
   'https://ik.imagekit.io/rhjfaafsm/paysecurely.svg';

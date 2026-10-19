@@ -235,7 +235,7 @@ const SOCKET_PATH =
 ========================================================= */
 
 const TICKET_IMAGE =
-  'https://ik.imagekit.io/rhjfaafsm/lastdanceticket3.svg';
+  'https://ik.imagekit.io/rhjfaafsm/ticketpageticketpageLD.png';
 
 const MPESA_SECURE_IMAGE =
   'https://ik.imagekit.io/rhjfaafsm/paysecurely.svg';

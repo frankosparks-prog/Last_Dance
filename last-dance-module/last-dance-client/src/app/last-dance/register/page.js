@@ -383,31 +383,31 @@ const CATEGORIES = [
 const PRESET_AVATARS = [
   {
     url:
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=85',
+      'https://ik.imagekit.io/rhjfaafsm/GlamourprofileLD.png',
     label: 'Glamour',
   },
 
   {
     url:
-      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&auto=format&fit=crop&q=85',
+      'https://ik.imagekit.io/rhjfaafsm/classicprofilepicLD.png',
     label: 'Classic',
   },
 
   {
     url:
-      'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&auto=format&fit=crop&q=85',
+      'https://ik.imagekit.io/rhjfaafsm/Chicprofileld.png',
     label: 'Chic',
   },
 
   {
     url:
-      'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=800&auto=format&fit=crop&q=85',
+      'https://ik.imagekit.io/rhjfaafsm/StyleprofileLD.png',
     label: 'Style',
   },
 
   {
     url:
-      'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800&auto=format&fit=crop&q=85',
+      'https://ik.imagekit.io/rhjfaafsm/vibesprofileLD.png',
     label: 'Vibe',
   },
 ];

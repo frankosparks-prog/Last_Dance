@@ -1762,7 +1762,7 @@ const SOCKET_PATH =
 ========================================================= */
 
 const TICKET_IMAGE =
-  'https://ik.imagekit.io/rhjfaafsm/LastDanceTickets2.svg';
+  'https://ik.imagekit.io/rhjfaafsm/lastdanceticket4.png?updatedAt=1792387486263';
 
 const PASS_BENEFITS = [
   {
