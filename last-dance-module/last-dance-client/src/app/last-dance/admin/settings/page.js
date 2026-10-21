@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { 
   Settings, Power, CreditCard, Sparkles, Save, 
   CheckCircle2, AlertCircle, RefreshCw, Music, 
-  Calendar, DollarSign, ShieldCheck, Tag, X
+  Calendar, DollarSign, ShieldCheck, Tag, X, ArrowRight
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -281,6 +282,32 @@ export default function AdminSettingsPage() {
               </div>
             </div>
 
+          </div>
+        </div>
+
+        {/* Section: Nominee Categories Architecture */}
+        <div className="bg-white border border-black/[0.08] p-6 sm:p-7 rounded-3xl shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="space-y-1">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-[#762e99]">
+                Award Architecture & Ballots
+              </span>
+              <h2 className="text-[18px] font-normal text-black">
+                Nominee Categories & Ballot Navigation
+              </h2>
+              <p className="text-[12px] text-black/50">
+                Configure award categories, reorder leaderboard navigation tabs, and manage live candidate distribution.
+              </p>
+            </div>
+
+            <Link
+              href="/last-dance/admin/categories"
+              className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-full bg-[#f7f7f7] border border-black/15 text-black hover:border-[#762e99] hover:text-[#762e99] text-[12px] font-semibold transition self-start sm:self-auto shrink-0 shadow-xs"
+            >
+              <Tag className="w-3.5 h-3.5 text-[#762e99]" />
+              <span>Configure Categories</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
         </div>
 

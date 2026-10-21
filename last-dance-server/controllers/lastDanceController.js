@@ -45,7 +45,7 @@ exports.getSettings = async (req, res) => {
 // 2. Admin Update Settings (e.g. Master Toggle ON/OFF)
 exports.updateSettings = async (req, res) => {
     try {
-        const { enabled, activePaymentGateway, ticketPriceKES, tagline, eventDate, musicUrl, votePackages } = req.body;
+        const { enabled, activePaymentGateway, ticketPriceKES, tagline, eventDate, musicUrl, votePackages, categories } = req.body;
         let settings = await getOrCreateSettings();
 
         if (typeof enabled === 'boolean') settings.enabled = enabled;
@@ -55,6 +55,9 @@ exports.updateSettings = async (req, res) => {
         if (eventDate) settings.eventDate = eventDate;
         if (typeof musicUrl === 'string') settings.musicUrl = musicUrl;
         if (Array.isArray(votePackages)) settings.votePackages = votePackages;
+        if (Array.isArray(categories)) {
+            settings.categories = categories.map(c => String(c).trim()).filter(Boolean);
+        }
 
         await settings.save();
 
@@ -64,13 +67,244 @@ exports.updateSettings = async (req, res) => {
                 enabled: settings.enabled,
                 eventTitle: settings.eventTitle,
                 eventDate: settings.eventDate,
-                votePackages: settings.votePackages
+                votePackages: settings.votePackages,
+                categories: settings.categories
+            });
+            global.io.emit('last_dance:categories_updated', {
+                categories: settings.categories
             });
         }
 
         res.json({ success: true, settings, message: 'Last Dance settings updated successfully' });
     } catch (err) {
         console.error('[LastDance] updateSettings error:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+// 2b. Get Public Categories with Live Breakdown Stats
+exports.getCategories = async (req, res) => {
+    try {
+        const settings = await getOrCreateSettings();
+        const categories = settings.categories || [];
+
+        // Count nominees per category
+        const candidates = await Candidate.find({}, 'category isApproved');
+        const categoryStats = {};
+        categories.forEach(cat => {
+            categoryStats[cat] = { total: 0, approved: 0, pending: 0 };
+        });
+
+        candidates.forEach(c => {
+            const catName = c.category || 'Uncategorized';
+            if (!categoryStats[catName]) {
+                categoryStats[catName] = { total: 0, approved: 0, pending: 0 };
+            }
+            categoryStats[catName].total += 1;
+            if (c.isApproved) categoryStats[catName].approved += 1;
+            else categoryStats[catName].pending += 1;
+        });
+
+        res.json({
+            success: true,
+            categories,
+            categoryStats
+        });
+    } catch (err) {
+        console.error('[LastDance] getCategories error:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+// 2c. Admin Add Category
+exports.adminAddCategory = async (req, res) => {
+    try {
+        const { name } = req.body;
+        if (!name || typeof name !== 'string' || !name.trim()) {
+            return res.status(400).json({ success: false, message: 'Category name is required.' });
+        }
+
+        const cleanName = name.trim();
+        const settings = await getOrCreateSettings();
+
+        // Check for duplicate (case-insensitive)
+        const exists = settings.categories.some(c => c.toLowerCase() === cleanName.toLowerCase());
+        if (exists) {
+            return res.status(400).json({ success: false, message: `Category "${cleanName}" already exists.` });
+        }
+
+        settings.categories.push(cleanName);
+        await settings.save();
+
+        if (global.io) {
+            global.io.emit('last_dance:categories_updated', {
+                categories: settings.categories
+            });
+        }
+
+        res.status(201).json({
+            success: true,
+            categories: settings.categories,
+            category: cleanName,
+            message: `Category "${cleanName}" added successfully.`
+        });
+    } catch (err) {
+        console.error('[LastDance] adminAddCategory error:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+// 2d. Admin Update / Rename Category (Auto-migrates all candidates)
+exports.adminUpdateCategory = async (req, res) => {
+    try {
+        const oldName = decodeURIComponent(req.params.oldCategoryName || req.body.oldName || '').trim();
+        const { newName } = req.body;
+
+        if (!oldName) {
+            return res.status(400).json({ success: false, message: 'Existing category name is required.' });
+        }
+        if (!newName || typeof newName !== 'string' || !newName.trim()) {
+            return res.status(400).json({ success: false, message: 'New category name is required.' });
+        }
+
+        const cleanNewName = newName.trim();
+        const settings = await getOrCreateSettings();
+
+        const index = settings.categories.findIndex(c => c.toLowerCase() === oldName.toLowerCase());
+        if (index === -1) {
+            return res.status(404).json({ success: false, message: `Category "${oldName}" not found.` });
+        }
+
+        // Check duplicate collision if renaming to another existing category
+        if (cleanNewName.toLowerCase() !== oldName.toLowerCase()) {
+            const exists = settings.categories.some(c => c.toLowerCase() === cleanNewName.toLowerCase());
+            if (exists) {
+                return res.status(400).json({ success: false, message: `Category "${cleanNewName}" already exists.` });
+            }
+        }
+
+        const actualOldName = settings.categories[index];
+        settings.categories[index] = cleanNewName;
+        await settings.save();
+
+        // Migrate all candidates belonging to this category
+        const updateResult = await Candidate.updateMany(
+            { category: actualOldName },
+            { category: cleanNewName }
+        );
+
+        if (global.io) {
+            global.io.emit('last_dance:categories_updated', {
+                categories: settings.categories,
+                migrated: { oldName: actualOldName, newName: cleanNewName, count: updateResult.modifiedCount }
+            });
+            global.io.emit('last_dance:candidates_updated');
+        }
+
+        res.json({
+            success: true,
+            categories: settings.categories,
+            migratedCount: updateResult.modifiedCount,
+            message: `Category renamed to "${cleanNewName}". ${updateResult.modifiedCount} candidate(s) migrated.`
+        });
+    } catch (err) {
+        console.error('[LastDance] adminUpdateCategory error:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+// 2e. Admin Delete Category (with safe candidate reassignment)
+exports.adminDeleteCategory = async (req, res) => {
+    try {
+        const categoryName = decodeURIComponent(req.params.categoryName || '').trim();
+        const { reassignTo } = req.body;
+
+        if (!categoryName) {
+            return res.status(400).json({ success: false, message: 'Category name is required.' });
+        }
+
+        const settings = await getOrCreateSettings();
+        const index = settings.categories.findIndex(c => c.toLowerCase() === categoryName.toLowerCase());
+        if (index === -1) {
+            return res.status(404).json({ success: false, message: `Category "${categoryName}" not found.` });
+        }
+
+        const actualName = settings.categories[index];
+
+        // Check if any candidates are enrolled in this category
+        const candidatesCount = await Candidate.countDocuments({ category: actualName });
+        if (candidatesCount > 0) {
+            if (!reassignTo || typeof reassignTo !== 'string' || !reassignTo.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    hasCandidates: true,
+                    count: candidatesCount,
+                    message: `Cannot delete category "${actualName}" because ${candidatesCount} candidate(s) are registered under it. Please choose a target category to reassign them to.`
+                });
+            }
+
+            const cleanTarget = reassignTo.trim();
+            if (cleanTarget.toLowerCase() === actualName.toLowerCase()) {
+                return res.status(400).json({ success: false, message: 'Target reassignment category cannot be the one being deleted.' });
+            }
+
+            const targetCategory = settings.categories.find(c => c.toLowerCase() === cleanTarget.toLowerCase());
+            if (!targetCategory) {
+                return res.status(400).json({ success: false, message: `Target reassignment category "${cleanTarget}" not found.` });
+            }
+
+            await Candidate.updateMany({ category: actualName }, { category: targetCategory });
+        }
+
+        // Remove from settings
+        settings.categories.splice(index, 1);
+        await settings.save();
+
+        if (global.io) {
+            global.io.emit('last_dance:categories_updated', {
+                categories: settings.categories
+            });
+            global.io.emit('last_dance:candidates_updated');
+        }
+
+        res.json({
+            success: true,
+            categories: settings.categories,
+            message: `Category "${actualName}" deleted successfully${candidatesCount > 0 ? ` and ${candidatesCount} candidate(s) were reassigned.` : '.'}`
+        });
+    } catch (err) {
+        console.error('[LastDance] adminDeleteCategory error:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+// 2f. Admin Reorder Categories
+exports.adminReorderCategories = async (req, res) => {
+    try {
+        const { categories } = req.body;
+        if (!Array.isArray(categories) || categories.length === 0) {
+            return res.status(400).json({ success: false, message: 'Valid categories list is required.' });
+        }
+
+        const cleanList = categories.map(c => String(c).trim()).filter(Boolean);
+        const settings = await getOrCreateSettings();
+
+        settings.categories = cleanList;
+        await settings.save();
+
+        if (global.io) {
+            global.io.emit('last_dance:categories_updated', {
+                categories: settings.categories
+            });
+        }
+
+        res.json({
+            success: true,
+            categories: settings.categories,
+            message: 'Categories reordered successfully.'
+        });
+    } catch (err) {
+        console.error('[LastDance] adminReorderCategories error:', err);
         res.status(500).json({ success: false, message: err.message });
     }
 };
@@ -141,7 +375,10 @@ exports.registerCandidate = async (req, res) => {
             return res.status(400).json({ success: false, message: 'All profile fields are required.' });
         }
 
-        if (!settings.categories.includes(category)) {
+        const matchedCategory = settings.categories.find(
+            c => c.toLowerCase() === String(category).trim().toLowerCase()
+        );
+        if (!matchedCategory) {
             return res.status(400).json({ success: false, message: 'Invalid candidate category selection.' });
         }
 
@@ -150,7 +387,7 @@ exports.registerCandidate = async (req, res) => {
             photoUrl: photoUrl.trim(),
             oneLiner: oneLiner.trim(),
             pitch: pitch.trim(),
-            category,
+            category: matchedCategory,
             phoneNumber: (phoneNumber || phone || '').trim(),
             isApproved: false,
             voteCount: 0

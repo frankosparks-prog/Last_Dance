@@ -345,9 +345,11 @@
 
 import React, {
   useState,
+  useEffect,
 } from 'react';
 
 import axios from 'axios';
+import io from 'socket.io-client';
 import Link from 'next/link';
 import CloudinaryImageUpload from '@/components/last-dance/CloudinaryImageUpload';
 
@@ -355,11 +357,19 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   'http://localhost:5000/api';
 
+const SOCKET_URL =
+  process.env.NEXT_PUBLIC_SOCKET_URL ||
+  'http://localhost:5000';
+
+const SOCKET_PATH =
+  process.env.NEXT_PUBLIC_SOCKET_PATH ||
+  '/api/socket.io';
+
 /* =========================================================
-   AWARD CATEGORIES
+   DEFAULT AWARD CATEGORIES
 ========================================================= */
 
-const CATEGORIES = [
+const DEFAULT_CATEGORIES = [
   'Mr & Miss Last Dance',
   'Most Likely to Succeed',
   'Best Dressed / Most Stylish',
@@ -432,6 +442,9 @@ const INITIAL_FORM = {
 ========================================================= */
 
 export default function CandidateRegisterPage() {
+  const [categories, setCategories] =
+    useState(DEFAULT_CATEGORIES);
+
   const [form, setForm] =
     useState(INITIAL_FORM);
 
@@ -441,6 +454,66 @@ export default function CandidateRegisterPage() {
       success: false,
       error: '',
     });
+
+  /* =======================================================
+     FETCH DYNAMIC CATEGORIES & SOCKET LISTENER
+  ======================================================= */
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchCategories = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/last-dance/categories`);
+        if (
+          isMounted &&
+          res.data?.success &&
+          Array.isArray(res.data.categories) &&
+          res.data.categories.length > 0
+        ) {
+          const fetchedCats = res.data.categories;
+          setCategories(fetchedCats);
+          setForm((prev) => {
+            if (!fetchedCats.includes(prev.category)) {
+              return { ...prev, category: fetchedCats[0] };
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        console.warn('[Registration] Could not fetch dynamic categories:', err);
+      }
+    };
+
+    fetchCategories();
+
+    let socket;
+    try {
+      socket = io(SOCKET_URL, {
+        path: SOCKET_PATH,
+        transports: ['websocket', 'polling'],
+      });
+
+      socket.on('last_dance:categories_updated', (data) => {
+        if (
+          data?.categories &&
+          Array.isArray(data.categories) &&
+          data.categories.length > 0
+        ) {
+          setCategories(data.categories);
+        }
+      });
+    } catch (sockErr) {
+      console.warn('[Registration] Socket connect error:', sockErr);
+    }
+
+    return () => {
+      isMounted = false;
+      if (socket) {
+        socket.disconnect();
+      }
+    };
+  }, []);
 
   /* =======================================================
      FORM UPDATE HELPER
@@ -1306,7 +1379,7 @@ export default function CandidateRegisterPage() {
                         focus:border-[#762e99]
                       "
                     >
-                      {CATEGORIES.map(
+                      {categories.map(
                         (category) => (
                           <option
                             key={

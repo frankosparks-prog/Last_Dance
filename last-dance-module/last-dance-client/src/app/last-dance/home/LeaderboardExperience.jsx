@@ -673,15 +673,66 @@ export default function LeaderboardExperience() {
       });
     };
 
+    const handleCategoriesUpdated = (data) => {
+      if (data?.categories && Array.isArray(data.categories)) {
+        console.log('[Leaderboard] Real-time categories update received:', data.categories);
+        setCategories(data.categories);
+
+        // If current selectedCategory was renamed, migrate active tab selection
+        if (data.migrated && data.migrated.oldName && data.migrated.newName) {
+          setSelectedCategory((prev) => (prev === data.migrated.oldName ? data.migrated.newName : prev));
+        } else {
+          // If current selected category was deleted, fallback to 'All'
+          setSelectedCategory((prev) => {
+            if (prev !== 'All' && !data.categories.includes(prev)) {
+              return 'All';
+            }
+            return prev;
+          });
+        }
+
+        if (fetchCandidates) {
+          fetchCandidates();
+        }
+      }
+    };
+
+    const handleCandidatesUpdated = () => {
+      console.log('[Leaderboard] Real-time candidates update received');
+      if (fetchCandidates) {
+        fetchCandidates();
+      }
+    };
+
     socket.on(
       'last_dance:vote_updated',
       handleVoteUpdated
+    );
+
+    socket.on(
+      'last_dance:categories_updated',
+      handleCategoriesUpdated
+    );
+
+    socket.on(
+      'last_dance:candidates_updated',
+      handleCandidatesUpdated
     );
 
     return () => {
       socket.off(
         'last_dance:vote_updated',
         handleVoteUpdated
+      );
+
+      socket.off(
+        'last_dance:categories_updated',
+        handleCategoriesUpdated
+      );
+
+      socket.off(
+        'last_dance:candidates_updated',
+        handleCandidatesUpdated
       );
 
       socket.disconnect();

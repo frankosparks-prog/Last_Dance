@@ -25,17 +25,8 @@ const CandidateSchema = new mongoose.Schema({
     category: {
         type: String,
         required: [true, 'Category is required'],
-        enum: [
-            'Mr & Miss Last Dance',
-            'Most Likely to Succeed',
-            'Best Dressed / Most Stylish',
-            'Life of the Party',
-            'Power Couple',
-            'Campus Icon',
-            'Comeback King/Queen',
-            'Squad of the Year',
-            'Most Missed'
-        ]
+        trim: true,
+        index: true
     },
     isApproved: {
         type: Boolean,

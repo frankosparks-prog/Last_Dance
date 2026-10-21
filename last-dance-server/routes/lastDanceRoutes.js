@@ -12,6 +12,9 @@ const { upload } = require('../utils/cloudinary');
 // Get system config & active status
 router.get('/settings', lastDanceController.getSettings);
 
+// Get active categories list & nominee counts breakdown
+router.get('/categories', lastDanceController.getCategories);
+
 // Get approved candidates list with rankings & gap stats
 router.get('/candidates', lastDanceController.getCandidates);
 
@@ -73,5 +76,11 @@ router.post('/admin/tickets/reset-scan', protect, role('admin'), lastDanceContro
 
 // Update Module Settings (e.g. Turn Module ON/OFF, Active Payment Gateway)
 router.post('/admin/settings', protect, role('admin'), lastDanceController.updateSettings);
+
+// Category Management (Add, Reorder, Rename with auto-migration, Delete with safe reassignment)
+router.post('/admin/categories', protect, role('admin'), lastDanceController.adminAddCategory);
+router.put('/admin/categories/reorder', protect, role('admin'), lastDanceController.adminReorderCategories);
+router.put('/admin/categories/:oldCategoryName', protect, role('admin'), lastDanceController.adminUpdateCategory);
+router.delete('/admin/categories/:categoryName', protect, role('admin'), lastDanceController.adminDeleteCategory);
 
 module.exports = router;

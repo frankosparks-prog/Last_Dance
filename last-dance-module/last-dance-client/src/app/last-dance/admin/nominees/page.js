@@ -10,7 +10,7 @@ import CloudinaryImageUpload from '@/components/last-dance/CloudinaryImageUpload
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-const CATEGORIES = [
+const DEFAULT_CATEGORIES = [
   'Mr & Miss Last Dance',
   'Most Likely to Succeed',
   'Best Dressed / Most Stylish',
@@ -24,6 +24,7 @@ const CATEGORIES = [
 
 export default function AdminNomineesPage() {
   const [candidates, setCandidates] = useState([]);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [candidateStats, setCandidateStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -40,7 +41,7 @@ export default function AdminNomineesPage() {
   const [candidateForm, setCandidateForm] = useState({
     name: '',
     photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=85',
-    category: 'Mr & Miss Last Dance',
+    category: DEFAULT_CATEGORIES[0],
     oneLiner: '',
     pitch: '',
     voteCount: 0,
@@ -51,13 +52,20 @@ export default function AdminNomineesPage() {
     setLoading(true);
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || 'admin-token' : 'admin-token';
-      const res = await axios.get(`${API_BASE_URL}/last-dance/admin/candidates`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const [candRes, catRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/last-dance/admin/candidates`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API_BASE_URL}/last-dance/categories`).catch(() => ({ data: {} }))
+      ]);
 
-      if (res.data?.success) {
-        setCandidates(res.data.candidates || []);
-        setCandidateStats(res.data.stats || null);
+      if (candRes.data?.success) {
+        setCandidates(candRes.data.candidates || []);
+        setCandidateStats(candRes.data.stats || null);
+      }
+
+      if (catRes.data?.success && Array.isArray(catRes.data.categories) && catRes.data.categories.length > 0) {
+        setCategories(catRes.data.categories);
       }
     } catch (err) {
       console.error('Failed to fetch candidates:', err);
@@ -112,7 +120,7 @@ export default function AdminNomineesPage() {
     setCandidateForm({
       name: '',
       photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=85',
-      category: 'Mr & Miss Last Dance',
+      category: categories[0] || DEFAULT_CATEGORIES[0],
       phoneNumber: '',
       oneLiner: '',
       pitch: '',
@@ -127,7 +135,7 @@ export default function AdminNomineesPage() {
     setCandidateForm({
       name: candidate.name || '',
       photoUrl: candidate.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=85',
-      category: candidate.category || 'Mr & Miss Last Dance',
+      category: candidate.category || categories[0] || DEFAULT_CATEGORIES[0],
       phoneNumber: candidate.phoneNumber || candidate.phone || '',
       oneLiner: candidate.oneLiner || '',
       pitch: candidate.pitch || '',
@@ -256,7 +264,7 @@ export default function AdminNomineesPage() {
               className="border border-black/15 bg-white px-3 py-2 text-[13px] text-black outline-none rounded-xl focus:border-[#762e99] transition"
             >
               <option value="All">All Categories</option>
-              {CATEGORIES.map(cat => (
+              {categories.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
@@ -438,7 +446,7 @@ export default function AdminNomineesPage() {
                   onChange={(e) => setCandidateForm(prev => ({ ...prev, category: e.target.value }))}
                   className="w-full border border-black/15 bg-white px-3.5 py-2.5 text-[14px] text-black outline-none rounded-xl focus:border-[#762e99] transition"
                 >
-                  {CATEGORIES.map(cat => (
+                  {categories.map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>

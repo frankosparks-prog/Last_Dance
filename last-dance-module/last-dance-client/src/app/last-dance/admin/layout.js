@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { 
   Trophy, UserPlus, Ticket, Settings, LogOut, 
   ExternalLink, Menu, X, ShieldAlert, Sparkles, Power,
-  QrCode
+  QrCode, Tag
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -66,6 +66,7 @@ export default function AdminLayout({ children }) {
     { name: 'Overview', href: '/last-dance/admin', icon: Trophy, exact: true },
     { name: 'Gate Scanner', href: '/last-dance/admin/scanner', icon: QrCode, exact: false },
     { name: 'Nominees', href: '/last-dance/admin/nominees', icon: UserPlus, exact: false },
+    { name: 'Categories', href: '/last-dance/admin/categories', icon: Tag, exact: false },
     { name: 'Tickets & Sales', href: '/last-dance/admin/tickets', icon: Ticket, exact: false },
     { name: 'System Settings', href: '/last-dance/admin/settings', icon: Settings, exact: false },
   ];
