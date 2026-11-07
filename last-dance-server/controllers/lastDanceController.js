@@ -846,6 +846,112 @@ exports.handlePaymentCallback = async (req, res) => {
             return res.json({ ResponseCode: '0', ResponseDesc: 'Success' });
         }
 
+        // C. Check if it's a Service / Merchandise Booking (Deposit or Balance Payment)
+        const ServiceBooking = require('../models/ServiceBooking');
+        const serviceBooking = await ServiceBooking.findOne({
+            $or: [
+                { depositCheckoutRequestID: { $in: lookupKeys } },
+                { balanceCheckoutRequestID: { $in: lookupKeys } }
+            ]
+        });
+
+        if (serviceBooking) {
+            const isDeposit = lookupKeys.includes(serviceBooking.depositCheckoutRequestID);
+
+            if (!success || !mpesaReceiptNumber) {
+                if (isDeposit) {
+                    serviceBooking.depositStatus = 'failed';
+                    await serviceBooking.save();
+                    if (global.io) {
+                        global.io.emit(`last_dance:service_booking_failed:${serviceBooking.depositCheckoutRequestID}`, {
+                            success: false,
+                            status: 'failed',
+                            message: verification.resultDesc || 'Payment cancelled or declined on device.'
+                        });
+                    }
+                } else {
+                    serviceBooking.balanceStatus = 'failed';
+                    await serviceBooking.save();
+                }
+                return res.json({ ResponseCode: '0', ResponseDesc: 'Payment Failed or Cancelled' });
+            }
+
+            if (isDeposit) {
+                if (serviceBooking.depositStatus === 'completed' || serviceBooking.emailConfirmationSent) {
+                    return res.json({ ResponseCode: '0', ResponseDesc: 'Already processed' });
+                }
+
+                serviceBooking.depositStatus = 'completed';
+                serviceBooking.depositReceiptNumber = String(mpesaReceiptNumber).trim();
+                serviceBooking.depositPaidAt = new Date();
+                serviceBooking.status = 'confirmed';
+                await serviceBooking.save();
+
+                // Dispatch Email
+                try {
+                    const { sendServiceBookingEmail } = require('../utils/serviceMailer');
+                    await sendServiceBookingEmail({ booking: serviceBooking });
+                    serviceBooking.emailConfirmationSent = true;
+                    await serviceBooking.save();
+                } catch (mailErr) {
+                    console.error('[Callback] Service email error:', mailErr.message);
+                }
+
+                // Dispatch SMS
+                try {
+                    const { sendBookingConfirmationSms } = require('../services/smsService');
+                    await sendBookingConfirmationSms({ booking: serviceBooking });
+                    serviceBooking.smsConfirmationSent = true;
+                    await serviceBooking.save();
+                } catch (smsErr) {
+                    console.error('[Callback] Service SMS error:', smsErr.message);
+                }
+
+                if (global.io) {
+                    global.io.emit(`last_dance:service_booking_paid:${serviceBooking.depositCheckoutRequestID}`, {
+                        success: true,
+                        bookingRef: serviceBooking.bookingRef,
+                        receipt: serviceBooking.depositReceiptNumber
+                    });
+                    global.io.emit('last_dance:activity_feed', {
+                        message: `🎉 Booking confirmed: "${serviceBooking.serviceTitle}" for ${serviceBooking.clientName}!`,
+                        timestamp: new Date()
+                    });
+                }
+            } else {
+                // Balance Payment
+                if (serviceBooking.balanceStatus === 'completed') {
+                    return res.json({ ResponseCode: '0', ResponseDesc: 'Already processed' });
+                }
+
+                serviceBooking.balanceStatus = 'completed';
+                serviceBooking.balanceReceiptNumber = String(mpesaReceiptNumber).trim();
+                serviceBooking.balancePaidAt = new Date();
+                serviceBooking.status = 'completed';
+                await serviceBooking.save();
+
+                // Dispatch Balance SMS
+                try {
+                    const { sendBalanceCompletedSms } = require('../services/smsService');
+                    await sendBalanceCompletedSms({ booking: serviceBooking, receiptNumber: mpesaReceiptNumber });
+                    serviceBooking.balanceSmsSent = true;
+                    await serviceBooking.save();
+                } catch (smsErr) {
+                    console.error('[Callback] Service balance SMS error:', smsErr.message);
+                }
+
+                if (global.io) {
+                    global.io.emit(`last_dance:service_balance_paid:${serviceBooking.balanceCheckoutRequestID}`, {
+                        success: true,
+                        bookingRef: serviceBooking.bookingRef,
+                        receipt: serviceBooking.balanceReceiptNumber
+                    });
+                }
+            }
+
+            return res.json({ ResponseCode: '0', ResponseDesc: 'Success' });
+        }
+
         return res.json({ ResponseCode: '0', ResponseDesc: 'Unmatched transaction' });
     } catch (err) {
         console.error('[LastDance] handlePaymentCallback error:', err);

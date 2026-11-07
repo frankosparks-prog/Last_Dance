@@ -6,8 +6,10 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 
 const lastDanceRoutes = require('./routes/lastDanceRoutes');
+const serviceRoutes = require('./routes/serviceRoutes');
 const Candidate = require('./models/Candidate');
 const LastDanceSettings = require('./models/LastDanceSettings');
+const ServiceItem = require('./models/ServiceItem');
 
 const app = express();
 const server = http.createServer(app);
@@ -67,6 +69,7 @@ app.post(
 );
 
 // Main API Routes (mounted on both prefixes so requests with or without /api prefix work)
+app.use(['/api/last-dance/services', '/last-dance/services', '/api/services', '/services'], serviceRoutes);
 app.use(['/api/last-dance', '/last-dance'], lastDanceRoutes);
 
 // Database connection & Seed Mock Test Data
@@ -178,6 +181,82 @@ const seedInitialData = async () => {
 
       await Candidate.insertMany(sampleCandidates);
       console.log(`[Seed] Successfully seeded ${sampleCandidates.length} candidate nominees.`);
+    }
+
+    // 3. Seed Sample Services / Merchandise if service table is empty
+    const serviceCount = await ServiceItem.countDocuments();
+    if (serviceCount === 0) {
+      console.log('[Seed] Seeding initial marketplace services & merchandise...');
+      const sampleServices = [
+        {
+          title: 'Glam Graduation Red-Carpet Makeup',
+          category: 'Makeup Artist',
+          description: 'Full face red-carpet glamour including premium lash application, contouring, and 12-hour setting spray for photo perfection.',
+          imageUrl: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=800&auto=format&fit=crop&q=80',
+          totalPriceKES: 1500,
+          depositAmountKES: 50,
+          stockOrSlots: 20,
+          featured: true,
+          providerName: 'Sarah Glam Beauty',
+          providerContact: '0711223344',
+          internalNotes: 'On-campus booth 2 or hostel room callout available'
+        },
+        {
+          title: 'Luxury Acrylic Sculpting & Gel Nail Art',
+          category: 'Nail Tech',
+          description: 'Custom luxury shape acrylic tips with hand-painted nail art, chrome finish, or glitter gradient for your send-off night.',
+          imageUrl: 'https://images.unsplash.com/photo-1632345031435-8727f6897d53?w=800&auto=format&fit=crop&q=80',
+          totalPriceKES: 1200,
+          depositAmountKES: 50,
+          stockOrSlots: 15,
+          featured: true,
+          providerName: 'Vee Nail Haven',
+          providerContact: '0722334455',
+          internalNotes: 'All instruments UV-sterilized'
+        },
+        {
+          title: 'Official Last Dance Festival 2026 Hoodie',
+          category: 'Merchandise',
+          description: 'Heavyweight fleece embroidered festival send-off hoodie. Available in Electric Indigo and Midnight Black (Sizes S-XXL).',
+          imageUrl: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800&auto=format&fit=crop&q=80',
+          totalPriceKES: 2200,
+          depositAmountKES: 100,
+          stockOrSlots: 50,
+          featured: true,
+          providerName: 'Last Dance Merch Team',
+          providerContact: '0733445566',
+          internalNotes: 'Collection point: Main Quad Student Center'
+        },
+        {
+          title: 'Signature "Class of \'26" Commemorative T-Shirt',
+          category: 'Merchandise',
+          description: '100% combed cotton festival t-shirt with high-density gradient print and graduation year commemorative crest.',
+          imageUrl: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&auto=format&fit=crop&q=80',
+          totalPriceKES: 850,
+          depositAmountKES: 50,
+          stockOrSlots: 100,
+          featured: false,
+          providerName: 'Last Dance Merch Team',
+          providerContact: '0733445566',
+          internalNotes: 'Includes festival lanyard'
+        },
+        {
+          title: 'Executive Hair Styling, Updos & Barber Fade',
+          category: 'Hair & Styling',
+          description: 'Sharp clean fades, razor line-ups, or sleek styling and curls to match your evening attire.',
+          imageUrl: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&auto=format&fit=crop&q=80',
+          totalPriceKES: 1000,
+          depositAmountKES: 50,
+          stockOrSlots: 25,
+          featured: false,
+          providerName: 'Crown Studio Barbers',
+          providerContact: '0744556677',
+          internalNotes: 'Available on-site and room callout'
+        }
+      ];
+
+      await ServiceItem.insertMany(sampleServices);
+      console.log(`[Seed] Successfully seeded ${sampleServices.length} marketplace services & merchandise.`);
     }
   } catch (err) {
     console.error('[Seed] Error during seeding:', err.message);

@@ -204,6 +204,10 @@ export default function Navbar({
       href: '/last-dance/tickets',
     },
     {
+      name: 'Services & Merch',
+      href: '/last-dance/services',
+    },
+    {
       name: 'Nominate',
       href: '/last-dance/register',
     },

@@ -165,33 +165,76 @@ class PaymentGatewayService {
          String(t.external_reference || '').trim() === cleanRef)
       );
 
-      // Check if transaction explicitly failed or was cancelled
+      // Check if transaction was matched
       if (match) {
-        const status = String(match.status || '').toLowerCase();
-        if (status === 'failed' || match.ResultCode === 1032) {
+        const status = String(match.status || '').trim().toLowerCase();
+        const resultCode = match.ResultCode !== undefined && match.ResultCode !== null ? Number(match.ResultCode) : null;
+        const resultDesc = match.ResultDesc || match.result_desc || match.message || '';
+
+        // 1. Explicit failure or cancellation
+        const isFailed = 
+          status === 'failed' || 
+          status === 'cancelled' || 
+          status === 'canceled' || 
+          status === 'declined' || 
+          status === 'rejected' ||
+          status === 'timeout' ||
+          resultCode === 1032 || // Cancelled by user
+          resultCode === 1 ||    // Insufficient balance
+          resultCode === 2001 || // Wrong PIN
+          (resultCode !== null && resultCode !== 0);
+
+        if (isFailed) {
+          console.warn(`[PaymentGatewayService] Transaction ${cleanRef} explicitly failed on PayHero: status=${status}, code=${resultCode}, desc=${resultDesc}`);
           return {
             failed: true,
-            reason: match.ResultDesc || 'Request cancelled by user or payment failed'
+            reason: resultDesc || 'Request cancelled by user or payment failed'
           };
         }
 
-        if (match.transaction_type === 'inbound_payment' && match.provider_reference && !match.provider_reference.startsWith('cost_')) {
-          const receipt = String(match.provider_reference).trim();
+        // 2. Pending / Queued / Processing on PayHero
+        const isPending = 
+          status === 'pending' || 
+          status === 'queued' || 
+          status === 'processing' || 
+          status === 'waiting' ||
+          match.success === false;
 
+        if (isPending && status !== 'success' && status !== 'successful') {
+          return {
+            pending: true,
+            status: 'pending'
+          };
+        }
+
+        // 3. Explicit Success: MUST have success status AND a valid M-Pesa receipt
+        const isSuccessStatus = (status === 'success' || status === 'successful' || status === 'completed' || match.success === true);
+        const receipt = String(match.provider_reference || match.MpesaReceiptNumber || match.mpesa_receipt || '').trim();
+        const isValidReceipt = receipt && !receipt.startsWith('cost_') && receipt.length >= 7;
+
+        if (isSuccessStatus && (resultCode === 0 || resultCode === null) && isValidReceipt) {
           // Idempotency: Verify this receipt has NOT already been claimed by another order!
           const TicketPurchase = require('../models/TicketPurchase');
           const VoteTransaction = require('../models/VoteTransaction');
+          const ServiceBooking = require('../models/ServiceBooking');
 
-          const [alreadyTicket, alreadyVote] = await Promise.all([
+          const [alreadyTicket, alreadyVote, alreadyService] = await Promise.all([
             TicketPurchase.findOne({ mpesaReceiptNumber: receipt, checkoutRequestID: { $ne: cleanRef } }),
-            VoteTransaction.findOne({ mpesaReceiptNumber: receipt, checkoutRequestID: { $ne: cleanRef } })
+            VoteTransaction.findOne({ mpesaReceiptNumber: receipt, checkoutRequestID: { $ne: cleanRef } }),
+            ServiceBooking.findOne({
+              $or: [
+                { depositReceiptNumber: receipt, depositCheckoutRequestID: { $ne: cleanRef } },
+                { balanceReceiptNumber: receipt, balanceCheckoutRequestID: { $ne: cleanRef } }
+              ]
+            })
           ]);
 
-          if (alreadyTicket || alreadyVote) {
-            console.warn(`[PaymentGatewayService] Security Alert: Receipt ${receipt} is already claimed by order ${alreadyTicket?._id || alreadyVote?._id}. Rejecting match for ${cleanRef}.`);
+          if (alreadyTicket || alreadyVote || alreadyService) {
+            console.warn(`[PaymentGatewayService] Security Alert: Receipt ${receipt} is already claimed by order. Rejecting match for ${cleanRef}.`);
             return null;
           }
 
+          console.log(`[PaymentGatewayService] Verified completed transaction for ${cleanRef}: Receipt=${receipt}, Amount=${match.amount}`);
           return {
             success: true,
             mpesaReceiptNumber: receipt,
@@ -199,6 +242,12 @@ class PaymentGatewayService {
             transactionReference: match.transaction_reference
           };
         }
+
+        // If not explicit success, treat as pending
+        return {
+          pending: true,
+          status: 'pending'
+        };
       }
 
       // STRICT: Never use fuzzy phone/amount matching. A transaction must be tied strictly to its checkout reference.

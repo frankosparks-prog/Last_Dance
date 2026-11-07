@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { 
   Trophy, UserPlus, Ticket, Settings, LogOut, 
   ExternalLink, Menu, X, ShieldAlert, Sparkles, Power,
-  QrCode, Tag
+  QrCode, Tag, ShoppingBag
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -65,6 +65,8 @@ export default function AdminLayout({ children }) {
   const navItems = [
     { name: 'Overview', href: '/last-dance/admin', icon: Trophy, exact: true },
     { name: 'Gate Scanner', href: '/last-dance/admin/scanner', icon: QrCode, exact: false },
+    { name: 'Services Catalog', href: '/last-dance/admin/services', icon: Sparkles, exact: true },
+    { name: 'Service Bookings', href: '/last-dance/admin/services/bookings', icon: ShoppingBag, exact: false },
     { name: 'Nominees', href: '/last-dance/admin/nominees', icon: UserPlus, exact: false },
     { name: 'Categories', href: '/last-dance/admin/categories', icon: Tag, exact: false },
     { name: 'Tickets & Sales', href: '/last-dance/admin/tickets', icon: Ticket, exact: false },
