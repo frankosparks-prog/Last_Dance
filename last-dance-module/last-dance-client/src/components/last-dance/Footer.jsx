@@ -660,6 +660,10 @@ export default function Footer() {
       href: '/last-dance',
     },
     {
+      name: 'Services & Merchandise',
+      href: '/last-dance/services',
+    },
+    {
       name: 'Buy Entry Tickets',
       href: '/last-dance/tickets',
     },

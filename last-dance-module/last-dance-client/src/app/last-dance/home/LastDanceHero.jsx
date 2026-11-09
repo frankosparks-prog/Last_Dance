@@ -227,6 +227,35 @@ const LastDanceHero = () => {
             >
               Nominate a candidate
             </Link>
+
+            <Link
+              href="/last-dance/services"
+              className="
+                inline-flex
+                items-center
+                justify-center
+                rounded-full
+                border
+                border-white/50
+                bg-white/10
+                px-6
+                py-3
+                text-[14px]
+                font-medium
+                text-white
+                backdrop-blur-sm
+                transition-all
+                duration-200
+
+                hover:border-[#ff914d]
+                hover:bg-[#ff914d]
+                hover:text-white
+
+                active:scale-[0.98]
+              "
+            >
+              Services &amp; Merch
+            </Link>
           </div>
         </div>
       </div>

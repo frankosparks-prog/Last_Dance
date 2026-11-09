@@ -474,6 +474,7 @@
 
 
 import LastDanceHero from './home/LastDanceHero';
+import ServicesShowcase from './home/ServicesShowcase';
 import LeaderboardExperience from './home/LeaderboardExperience';
 
 export default function LastDancePage() {
@@ -489,6 +490,7 @@ export default function LastDancePage() {
       }}
     >
       <LastDanceHero />
+      <ServicesShowcase />
       <LeaderboardExperience />
     </div>
   );
