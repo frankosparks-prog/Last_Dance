@@ -208,6 +208,10 @@ export default function Navbar({
       href: '/last-dance/services',
     },
     {
+      name: 'Accommodations',
+      href: '/last-dance/accommodations',
+    },
+    {
       name: 'Nominate',
       href: '/last-dance/register',
     },
@@ -227,6 +231,7 @@ export default function Navbar({
 
   return (
     <header
+      suppressHydrationWarning
       className="
         sticky
         top-0

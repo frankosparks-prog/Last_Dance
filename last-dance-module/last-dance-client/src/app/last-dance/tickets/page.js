@@ -2322,7 +2322,7 @@ export default function TicketsPage() {
                 sm:text-[15px]
               "
             >
-              November 26th, 2026
+              November 25th, 2026
 
               <span
                 className="

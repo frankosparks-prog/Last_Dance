@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import ServiceBookingModal from '@/components/last-dance/ServiceBookingModal';
+import ServiceDetailsModal from '@/components/last-dance/ServiceDetailsModal';
+import { Home } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -46,6 +48,10 @@ export default function ServicesShowcase() {
   const [activeBookingService, setActiveBookingService] = useState(null);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
 
+  // Details Modal State
+  const [selectedServiceForDetails, setSelectedServiceForDetails] = useState(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -67,7 +73,13 @@ export default function ServicesShowcase() {
     };
   }, []);
 
+  const handleOpenDetails = (service) => {
+    setSelectedServiceForDetails(service);
+    setIsDetailsModalOpen(true);
+  };
+
   const handleOpenBooking = (service) => {
+    setIsDetailsModalOpen(false);
     setActiveBookingService(service);
     setIsBookingModalOpen(true);
   };
@@ -155,7 +167,8 @@ export default function ServicesShowcase() {
               return (
                 <article
                   key={service._id}
-                  className="group flex flex-col justify-between overflow-hidden border border-black/[0.08] bg-white transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_16px_35px_rgba(0,0,0,0.06)]"
+                  onClick={() => handleOpenDetails(service)}
+                  className="group cursor-pointer flex flex-col justify-between overflow-hidden border border-black/[0.08] bg-white transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_16px_35px_rgba(0,0,0,0.06)]"
                 >
                   {/* Image with Category Badge & Featured Tag */}
                   <div>
@@ -206,7 +219,10 @@ export default function ServicesShowcase() {
 
                       <button
                         type="button"
-                        onClick={() => handleOpenBooking(service)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenBooking(service);
+                        }}
                         className="rounded-full bg-[#5e2590] px-5 py-2 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[#762e99] active:scale-[0.98]"
                       >
                         Book Service
@@ -279,6 +295,45 @@ export default function ServicesShowcase() {
             </div>
           </div>
         </div>
+
+        {/* =============================================
+            ACCOMMODATIONS ADD-ON MARKETPLACE BANNER
+        ============================================= */}
+        <div className="rounded-3xl border-2 border-purple-200/80 bg-gradient-to-r from-purple-50 via-white to-purple-50/50 p-6 sm:p-8 lg:p-10 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-xs">
+          <div className="space-y-2 max-w-2xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-100 text-[#5e2590] text-[11.5px] font-bold">
+              <Home className="w-3.5 h-3.5" />
+              <span>New Add-On Module • Campus Stays</span>
+            </div>
+            <h3 className="text-[22px] sm:text-[25px] font-medium tracking-tight text-black">
+              Need a place to stay or got a room to enlist?
+            </h3>
+            <p className="text-[13.5px] sm:text-[14px] text-black/65 leading-relaxed">
+              Explore verified student bedsitters, apartments, and private rooms for graduation eve. Or enlist your space for KES 100 with a KES 50 refund guarantee if unbooked.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <Link
+              href="/last-dance/accommodations"
+              className="px-6 py-3 rounded-full bg-[#5e2590] hover:bg-[#762e99] text-white text-[13.5px] font-medium transition shadow-md flex items-center gap-2"
+            >
+              <span>Explore Stays &amp; Rooms</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Full Details Modal on Card Click */}
+        <ServiceDetailsModal
+          service={selectedServiceForDetails}
+          isOpen={isDetailsModalOpen}
+          onClose={() => setIsDetailsModalOpen(false)}
+          onBookNow={(svc) => {
+            setIsDetailsModalOpen(false);
+            handleOpenBooking(svc);
+          }}
+        />
 
         {/* Booking Modal */}
         <ServiceBookingModal

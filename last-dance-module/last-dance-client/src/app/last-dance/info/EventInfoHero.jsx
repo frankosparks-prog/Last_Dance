@@ -448,7 +448,7 @@ function EventInfoHero() {
               sm:text-[14px]
             "
           >
-            November 27th, 2026
+            November 25th, 2026
 
             <span
               className="

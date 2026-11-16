@@ -55,7 +55,29 @@ const LastDanceSettingsSchema = new mongoose.Schema({
         priceKES: Number,
         discountText: String,
         isPopular: Boolean
-    }]
+    }],
+    accommodationSettings: {
+        enabled: {
+            type: Boolean,
+            default: true
+        },
+        hostListingFeeKES: {
+            type: Number,
+            default: 100
+        },
+        hostRefundFeeKES: {
+            type: Number,
+            default: 50
+        },
+        clientBookingFeeKES: {
+            type: Number,
+            default: 100
+        },
+        disclaimerText: {
+            type: String,
+            default: 'Last Dance Festival is a marketplace platform connector only. We are not the property owner, landlord, or insurer. All accommodations are agreed directly between host and guest.'
+        }
+    }
 }, {
     timestamps: true
 });

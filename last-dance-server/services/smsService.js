@@ -137,11 +137,92 @@ async function sendBalanceCompletedSms({ booking, receiptNumber }) {
     });
 }
 
+/**
+ * Send Accommodation Host Phone Verification OTP SMS
+ */
+async function sendAccommodationOtpSms({ phone, otpCode }) {
+    const message = `Your Last Dance Accommodation Verification Code is ${otpCode}. Valid for 10 minutes. Do not share this code with anyone.`;
+    return sendSms({
+        phone,
+        message
+    });
+}
+
+/**
+ * Send Host Enlisting Confirmation SMS
+ */
+async function sendHostEnlistingConfirmedSms({ listing, frontendUrl }) {
+    if (!listing || !listing.hostPhone) return { success: false, error: 'Listing missing hostPhone' };
+
+    const siteUrl = frontendUrl || process.env.FRONTEND_URL || 'https://lastdance.co.ke';
+    const message = `Hello ${listing.hostName}! Your house "${listing.title}" is officially listed (Ref: ${listing.listingRef}). Enlisting fee KES ${listing.enlistingFeeKES || 100} received (M-Pesa: ${listing.enlistingReceiptNumber || 'Verified'}). If unbooked by festival date, KES ${listing.refundAmountKES || 50} is refunded. View: ${siteUrl}/last-dance/accommodations`;
+
+    return sendSms({
+        phone: listing.hostPhone,
+        message
+    });
+}
+
+/**
+ * Send Guest Accommodation Booking Confirmation SMS (With Host WhatsApp & Call Reveal)
+ */
+async function sendGuestAccommodationBookingSms({ booking, listing, frontendUrl }) {
+    if (!booking || !booking.guestPhone) return { success: false, error: 'Booking missing guestPhone' };
+
+    const siteUrl = frontendUrl || process.env.FRONTEND_URL || 'https://lastdance.co.ke';
+    const detailsUrl = `${siteUrl}/last-dance/accommodations/booking/${booking.bookingRef}`;
+    const hostNumber = booking.hostDetails?.phone || listing?.hostPhone || '';
+    const hostWa = booking.hostDetails?.whatsApp || listing?.hostWhatsApp || hostNumber;
+    const cleanWa = hostWa.replace(/[^0-9]/g, '');
+
+    const message = `Confirmed! Accommodation booking for "${booking.listingTitle}" (Ref: ${booking.bookingRef}). KES ${booking.connectionFeeKES || 100} paid. Host: ${booking.hostDetails?.name || listing?.hostName || 'Host'} (${hostNumber}). WhatsApp: https://wa.me/${cleanWa} View details: ${detailsUrl}`;
+
+    return sendSms({
+        phone: booking.guestPhone,
+        message
+    });
+}
+
+/**
+ * Send Host Notification SMS when Guest Books
+ */
+async function sendHostAccommodationBookedSms({ booking, listing }) {
+    const hostPhone = listing?.hostPhone || booking?.hostDetails?.phone;
+    if (!hostPhone) return { success: false, error: 'Missing hostPhone' };
+
+    const message = `Great news ${listing?.hostName || 'Host'}! Your house "${booking.listingTitle}" (Ref: ${listing?.listingRef || booking.bookingRef}) has been booked by ${booking.guestName} (${booking.guestPhone}) for ${booking.checkInDate} (${booking.guestCount} guest(s)). Please contact them to coordinate check-in!`;
+
+    return sendSms({
+        phone: hostPhone,
+        message
+    });
+}
+
+/**
+ * Send Host Refund Processed SMS for Unbooked House
+ */
+async function sendHostRefundProcessedSms({ listing, receiptNumber }) {
+    if (!listing || !listing.hostPhone) return { success: false, error: 'Missing hostPhone' };
+
+    const receipt = receiptNumber || listing.refundReceiptNumber || '';
+    const message = `Hello ${listing.hostName}, as per our accommodation policy, your unbooked property "${listing.title}" has been refunded KES ${listing.refundAmountKES || 50} (Receipt: ${receipt}). Thank you for enlisting with Last Dance Festival!`;
+
+    return sendSms({
+        phone: listing.hostPhone,
+        message
+    });
+}
+
 module.exports = {
     formatKenyanPhone,
     sendSms,
     sendBookingConfirmationSms,
     sendProviderAssignedSms,
-    sendBalanceCompletedSms
+    sendBalanceCompletedSms,
+    sendAccommodationOtpSms,
+    sendHostEnlistingConfirmedSms,
+    sendGuestAccommodationBookingSms,
+    sendHostAccommodationBookedSms,
+    sendHostRefundProcessedSms
 };
 

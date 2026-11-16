@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import ServiceBookingModal from '@/components/last-dance/ServiceBookingModal';
+import ServiceDetailsModal from '@/components/last-dance/ServiceDetailsModal';
+import { Home } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -25,6 +27,7 @@ const SERVICE_CATEGORIES = [
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&auto=format&fit=crop&q=80';
 
 export default function ServicesMarketplacePage() {
+  const [mounted, setMounted] = useState(false);
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -33,6 +36,10 @@ export default function ServicesMarketplacePage() {
   // Selected Service for Booking Modal
   const [activeBookingService, setActiveBookingService] = useState(null);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+
+  // Selected Service for Details Modal
+  const [selectedServiceForDetails, setSelectedServiceForDetails] = useState(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
   // Frictionless "My Bookings" Drawer & Phone Lookup Modals
   const [isMyBookingsOpen, setIsMyBookingsOpen] = useState(false);
@@ -74,6 +81,7 @@ export default function ServicesMarketplacePage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
     loadLocalBookings();
     fetchServices();
   }, [selectedCategory]);
@@ -82,7 +90,13 @@ export default function ServicesMarketplacePage() {
     setSearchQuery(val);
   };
 
+  const handleOpenDetails = (service) => {
+    setSelectedServiceForDetails(service);
+    setIsDetailsModalOpen(true);
+  };
+
   const handleOpenBooking = (service) => {
+    setIsDetailsModalOpen(false);
     setActiveBookingService(service);
     setIsBookingModalOpen(true);
   };
@@ -146,6 +160,7 @@ export default function ServicesMarketplacePage() {
 
   return (
     <div 
+      suppressHydrationWarning
       className="w-full bg-[#f7f7f7] min-h-screen py-10 sm:py-14 lg:py-16"
       style={{ fontFamily: 'Roboto, sans-serif' }}
     >
@@ -171,6 +186,14 @@ export default function ServicesMarketplacePage() {
 
           {/* Quick Access Pill Buttons (Frictionless Guest Storage) */}
           <div className="flex items-center gap-3 shrink-0">
+            <Link
+              href="/last-dance/accommodations"
+              className="flex items-center gap-2 rounded-full border border-purple-200 bg-purple-50/70 px-4 py-2 text-[13px] font-medium text-[#5e2590] hover:bg-purple-100 transition shadow-2xs"
+            >
+              <Home className="h-4 w-4" />
+              <span>Rooms &amp; Stays</span>
+            </Link>
+
             <button
               type="button"
               onClick={() => setIsMyBookingsOpen(true)}
@@ -178,7 +201,7 @@ export default function ServicesMarketplacePage() {
             >
               <BookmarkCheck className="h-4 w-4 text-[#5e2590]" />
               <span>My Bookings</span>
-              {myBookings.length > 0 && (
+              {mounted && myBookings.length > 0 && (
                 <span className="rounded-full bg-[#5e2590] text-white text-[10px] px-2 py-0.5 font-bold">
                   {myBookings.length}
                 </span>
@@ -290,7 +313,8 @@ export default function ServicesMarketplacePage() {
               return (
                 <article
                   key={service._id}
-                  className="group overflow-hidden border border-black/[0.08] bg-white transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_16px_35px_rgba(0,0,0,0.06)] flex flex-col justify-between"
+                  onClick={() => handleOpenDetails(service)}
+                  className="group cursor-pointer overflow-hidden border border-black/[0.08] bg-white transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_16px_35px_rgba(0,0,0,0.06)] flex flex-col justify-between"
                 >
                   {/* Image with Category Badge */}
                   <div>
@@ -341,7 +365,10 @@ export default function ServicesMarketplacePage() {
 
                       <button
                         type="button"
-                        onClick={() => handleOpenBooking(service)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenBooking(service);
+                        }}
                         className="rounded-full bg-[#5e2590] px-5 py-2 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[#762e99] active:scale-[0.98]"
                       >
                         Book Service
@@ -497,6 +524,17 @@ export default function ServicesMarketplacePage() {
             </div>
           </div>
         )}
+
+        {/* Full Details Modal on Card Click */}
+        <ServiceDetailsModal
+          service={selectedServiceForDetails}
+          isOpen={isDetailsModalOpen}
+          onClose={() => setIsDetailsModalOpen(false)}
+          onBookNow={(svc) => {
+            setIsDetailsModalOpen(false);
+            handleOpenBooking(svc);
+          }}
+        />
 
         {/* Booking Modal */}
         <ServiceBookingModal

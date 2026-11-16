@@ -7,6 +7,7 @@ require('dotenv').config();
 
 const lastDanceRoutes = require('./routes/lastDanceRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
+const accommodationRoutes = require('./routes/accommodationRoutes');
 const Candidate = require('./models/Candidate');
 const LastDanceSettings = require('./models/LastDanceSettings');
 const ServiceItem = require('./models/ServiceItem');
@@ -69,6 +70,7 @@ app.post(
 );
 
 // Main API Routes (mounted on both prefixes so requests with or without /api prefix work)
+app.use(['/api/last-dance/accommodations', '/last-dance/accommodations', '/api/accommodations', '/accommodations'], accommodationRoutes);
 app.use(['/api/last-dance/services', '/last-dance/services', '/api/services', '/services'], serviceRoutes);
 app.use(['/api/last-dance', '/last-dance'], lastDanceRoutes);
 
@@ -263,14 +265,14 @@ const seedInitialData = async () => {
   }
 };
 
-mongoose.connect(MONGO_URI)
+mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 5000 })
   .then(async () => {
     console.log('[Database] Connected to MongoDB database');
     await seedInitialData();
   })
   .catch((err) => {
     console.warn('[Database] MongoDB connection issue:', err.message);
-    console.warn('[Database] Server will continue running with mock handlers.');
+    console.warn('[Database] Server will continue running with resilient fallback handlers.');
   });
 
 server.listen(PORT, () => {

@@ -2,6 +2,7 @@
 // Handles Marketplace Services & Merchandise, Bookings, Payments, and Notifications
 
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const ServiceItem = require('../models/ServiceItem');
 const ServiceBooking = require('../models/ServiceBooking');
 const paymentGatewayService = require('../services/paymentGatewayService');
@@ -35,6 +36,63 @@ const DEFAULT_CATEGORIES = [
 exports.getServices = async (req, res) => {
     try {
         const { category, search } = req.query;
+
+        // Fallback when MongoDB is offline / reconnecting
+        if (mongoose.connection.readyState !== 1) {
+            const fallbackServices = [
+                {
+                    _id: 'mock-svc-1',
+                    title: 'Glam Graduation Red-Carpet Makeup',
+                    category: 'Makeup Artist',
+                    description: 'Full face red-carpet glamour including premium lash application, contouring, and 12-hour setting spray for photo perfection.',
+                    imageUrl: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=800&auto=format&fit=crop&q=80',
+                    totalPriceKES: 1500,
+                    depositAmountKES: 50,
+                    stockOrSlots: 20,
+                    featured: true
+                },
+                {
+                    _id: 'mock-svc-2',
+                    title: 'Luxury Acrylic Sculpting & Gel Nail Art',
+                    category: 'Nail Tech',
+                    description: 'Custom luxury shape acrylic tips with hand-painted nail art, chrome finish, or glitter gradient for your send-off night.',
+                    imageUrl: 'https://images.unsplash.com/photo-1632345031435-8727f6897d53?w=800&auto=format&fit=crop&q=80',
+                    totalPriceKES: 1200,
+                    depositAmountKES: 50,
+                    stockOrSlots: 15,
+                    featured: true
+                },
+                {
+                    _id: 'mock-svc-3',
+                    title: 'Official Last Dance Festival 2026 Hoodie',
+                    category: 'Merchandise',
+                    description: 'Heavyweight fleece embroidered festival send-off hoodie. Available in Electric Indigo and Midnight Black (Sizes S-XXL).',
+                    imageUrl: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800&auto=format&fit=crop&q=80',
+                    totalPriceKES: 2200,
+                    depositAmountKES: 100,
+                    stockOrSlots: 50,
+                    featured: true
+                },
+                {
+                    _id: 'mock-svc-4',
+                    title: 'Signature "Class of \'26" Commemorative T-Shirt',
+                    category: 'Merchandise',
+                    description: '100% combed cotton festival t-shirt with high-density gradient print and graduation year commemorative crest.',
+                    imageUrl: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&auto=format&fit=crop&q=80',
+                    totalPriceKES: 850,
+                    depositAmountKES: 50,
+                    stockOrSlots: 100,
+                    featured: false
+                }
+            ];
+            return res.json({
+                success: true,
+                count: fallbackServices.length,
+                services: fallbackServices,
+                categories: DEFAULT_CATEGORIES,
+                isMockFallback: true
+            });
+        }
         const query = { isActive: true };
 
         if (category && category !== 'All') {

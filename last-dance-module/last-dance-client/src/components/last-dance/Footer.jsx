@@ -664,6 +664,10 @@ export default function Footer() {
       href: '/last-dance/services',
     },
     {
+      name: 'Campus Accommodations',
+      href: '/last-dance/accommodations',
+    },
+    {
       name: 'Buy Entry Tickets',
       href: '/last-dance/tickets',
     },
@@ -679,6 +683,7 @@ export default function Footer() {
 
   return (
     <footer
+      suppressHydrationWarning
       className="
         relative
         w-full
@@ -972,7 +977,7 @@ export default function Footer() {
                     text-white/80
                   "
                 >
-                  November 26th, 2026
+                  November 25th, 2026
                 </p>
               </div>
 

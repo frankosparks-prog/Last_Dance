@@ -10,7 +10,44 @@ const { sendMail, sendLastDanceTicketEmail, generateStandalonePrintableTicketHtm
 const { uploadToCloudinary } = require('../utils/cloudinary');
 
 // Helper to get or initialize system settings
+// Default fallback settings in case MongoDB is temporarily starting or offline
+const DEFAULT_SETTINGS = {
+    key: 'global',
+    enabled: true,
+    eventDate: '2026-10-26',
+    eventTitle: 'Last Dance 2026',
+    tagline: 'One Last Night. One Last Dance.',
+    ticketPriceKES: 500,
+    categories: [
+        'Mr & Miss Last Dance',
+        'Most Likely to Succeed',
+        'Best Dressed / Most Stylish',
+        'Life of the Party',
+        'Power Couple',
+        'Campus Icon',
+        'Comeback King/Queen',
+        'Squad of the Year',
+        'Most Missed'
+    ],
+    votePackages: [
+        { label: 'Single Vote', votes: 1, priceKES: 10, discountText: '', isPopular: false },
+        { label: '10-Vote Power Pack', votes: 10, priceKES: 90, discountText: 'Save 10%', isPopular: true },
+        { label: '25-Vote Boost Pack', votes: 25, priceKES: 200, discountText: 'Save 20%', isPopular: false },
+        { label: '50-Vote Legend Pack', votes: 50, priceKES: 380, discountText: 'Save 24%', isPopular: false }
+    ],
+    accommodationSettings: {
+        enabled: true,
+        hostListingFeeKES: 100,
+        hostRefundFeeKES: 50,
+        clientBookingFeeKES: 100,
+        disclaimerText: 'Last Dance Festival operates solely as an introductory connector and does not own or insure properties.'
+    }
+};
+
 const getOrCreateSettings = async () => {
+    if (mongoose.connection.readyState !== 1) {
+        return DEFAULT_SETTINGS;
+    }
     let settings = await LastDanceSettings.findOne({ key: 'global' });
     if (!settings) {
         settings = await LastDanceSettings.create({
@@ -87,6 +124,15 @@ exports.getCategories = async (req, res) => {
     try {
         const settings = await getOrCreateSettings();
         const categories = settings.categories || [];
+
+        if (mongoose.connection.readyState !== 1) {
+            return res.json({
+                success: true,
+                categories,
+                categoryStats: {},
+                isMockFallback: true
+            });
+        }
 
         // Count nominees per category
         const candidates = await Candidate.find({}, 'category isApproved');
@@ -315,6 +361,41 @@ exports.getCandidates = async (req, res) => {
         const settings = await getOrCreateSettings();
         if (!settings.enabled && !req.user?.role) {
             return res.status(403).json({ success: false, disabled: true, message: 'Last Dance mode is currently disabled.' });
+        }
+
+        if (mongoose.connection.readyState !== 1) {
+            const sampleCandidates = [
+                {
+                    _id: 'mock-cand-1',
+                    name: 'Alexandre & Sophia',
+                    photoUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600&auto=format&fit=crop&q=80',
+                    oneLiner: 'The duo that stole everyone\'s hearts on campus!',
+                    pitch: 'From day 1 orientation to final year research labs, we have danced through every semester together.',
+                    category: 'Mr & Miss Last Dance',
+                    isApproved: true,
+                    voteCount: 420,
+                    rank: 1,
+                    votesToOvertake: 0
+                },
+                {
+                    _id: 'mock-cand-2',
+                    name: 'Marcus Vance',
+                    photoUrl: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=600&auto=format&fit=crop&q=80',
+                    oneLiner: 'Track captain, library regular, campus legend.',
+                    pitch: 'Leading the squad to 3 national trophies and making sure no one leaves Last Dance without a memory.',
+                    category: 'Campus Icon',
+                    isApproved: true,
+                    voteCount: 310,
+                    rank: 1,
+                    votesToOvertake: 0
+                }
+            ];
+            return res.json({
+                success: true,
+                candidates: sampleCandidates,
+                categories: settings.categories,
+                isMockFallback: true
+            });
         }
 
         const { category } = req.query;
@@ -947,6 +1028,139 @@ exports.handlePaymentCallback = async (req, res) => {
                         receipt: serviceBooking.balanceReceiptNumber
                     });
                 }
+            }
+
+            return res.json({ ResponseCode: '0', ResponseDesc: 'Success' });
+        }
+
+        // D. Check if it's an Accommodation Listing Enlisting Fee
+        const AccommodationListing = require('../models/AccommodationListing');
+        const accListing = await AccommodationListing.findOne({ enlistingCheckoutRequestID: { $in: lookupKeys } });
+        if (accListing) {
+            if (!success || !mpesaReceiptNumber) {
+                accListing.enlistingPaymentStatus = 'failed';
+                await accListing.save();
+                if (global.io) {
+                    global.io.emit(`last_dance:accommodation_enlisting_failed:${accListing.enlistingCheckoutRequestID}`, {
+                        success: false,
+                        status: 'failed',
+                        message: verification.resultDesc || 'Payment cancelled or declined on device.'
+                    });
+                }
+                return res.json({ ResponseCode: '0', ResponseDesc: 'Enlisting Fee Failed' });
+            }
+
+            if (accListing.enlistingPaymentStatus === 'completed') {
+                return res.json({ ResponseCode: '0', ResponseDesc: 'Already processed' });
+            }
+
+            accListing.enlistingPaymentStatus = 'completed';
+            accListing.enlistingReceiptNumber = String(mpesaReceiptNumber).trim();
+            accListing.enlistingPaidAt = new Date();
+            accListing.status = 'active'; // Automatically activate verified listing
+            await accListing.save();
+
+            // Dispatch Host SMS
+            try {
+                const { sendHostEnlistingConfirmedSms } = require('../services/smsService');
+                await sendHostEnlistingConfirmedSms({ listing: accListing });
+            } catch (smsErr) {
+                console.error('[Callback] Host enlisting SMS error:', smsErr.message);
+            }
+
+            if (global.io) {
+                global.io.emit(`last_dance:accommodation_enlisting_paid:${accListing.enlistingCheckoutRequestID}`, {
+                    success: true,
+                    listingRef: accListing.listingRef,
+                    receipt: accListing.enlistingReceiptNumber
+                });
+                global.io.emit('last_dance:activity_feed', {
+                    message: `🏡 New accommodation listed: "${accListing.title}" (${accListing.locationZone})!`,
+                    timestamp: new Date()
+                });
+            }
+
+            return res.json({ ResponseCode: '0', ResponseDesc: 'Success' });
+        }
+
+        // E. Check if it's an Accommodation Guest Booking / Connection Fee
+        const AccommodationBooking = require('../models/AccommodationBooking');
+        const accBooking = await AccommodationBooking.findOne({ checkoutRequestID: { $in: lookupKeys } }).populate('listing');
+        if (accBooking) {
+            if (!success || !mpesaReceiptNumber) {
+                accBooking.paymentStatus = 'failed';
+                accBooking.status = 'cancelled';
+                await accBooking.save();
+                if (global.io) {
+                    global.io.emit(`last_dance:accommodation_booking_failed:${accBooking.checkoutRequestID}`, {
+                        success: false,
+                        status: 'failed',
+                        message: verification.resultDesc || 'Payment cancelled or declined on device.'
+                    });
+                }
+                return res.json({ ResponseCode: '0', ResponseDesc: 'Booking Fee Failed' });
+            }
+
+            if (accBooking.paymentStatus === 'completed') {
+                return res.json({ ResponseCode: '0', ResponseDesc: 'Already processed' });
+            }
+
+            accBooking.paymentStatus = 'completed';
+            accBooking.mpesaReceiptNumber = String(mpesaReceiptNumber).trim();
+            accBooking.paidAt = new Date();
+            accBooking.status = 'confirmed';
+
+            // Snapshot host details onto booking for guest view
+            const listingDoc = accBooking.listing;
+            if (listingDoc) {
+                accBooking.hostDetails = {
+                    name: listingDoc.hostName,
+                    phone: listingDoc.hostPhone,
+                    whatsApp: listingDoc.hostWhatsApp || listingDoc.hostPhone,
+                    specificAddress: listingDoc.specificAddress
+                };
+                listingDoc.status = 'booked';
+                await listingDoc.save();
+            }
+
+            await accBooking.save();
+
+            // Dispatch Guest SMS
+            try {
+                const { sendGuestAccommodationBookingSms, sendHostAccommodationBookedSms } = require('../services/smsService');
+                await sendGuestAccommodationBookingSms({ booking: accBooking, listing: listingDoc });
+                accBooking.guestSmsSent = true;
+
+                // Dispatch Host SMS
+                if (listingDoc) {
+                    await sendHostAccommodationBookedSms({ booking: accBooking, listing: listingDoc });
+                    accBooking.hostSmsSent = true;
+                }
+                await accBooking.save();
+            } catch (smsErr) {
+                console.error('[Callback] Accommodation booking SMS error:', smsErr.message);
+            }
+
+            // Dispatch Guest Email
+            try {
+                const { sendGuestAccommodationEmail } = require('../utils/accommodationMailer');
+                await sendGuestAccommodationEmail({ booking: accBooking, listing: listingDoc });
+                accBooking.guestEmailSent = true;
+                await accBooking.save();
+            } catch (mailErr) {
+                console.error('[Callback] Accommodation booking Email error:', mailErr.message);
+            }
+
+            if (global.io) {
+                global.io.emit(`last_dance:accommodation_booking_paid:${accBooking.checkoutRequestID}`, {
+                    success: true,
+                    bookingRef: accBooking.bookingRef,
+                    receipt: accBooking.mpesaReceiptNumber
+                });
+                global.io.emit('last_dance:activity_feed', {
+                    message: `🔑 Accommodation booked: "${accBooking.listingTitle}" by ${accBooking.guestName}!`,
+                    timestamp: new Date()
+                });
             }
 
             return res.json({ ResponseCode: '0', ResponseDesc: 'Success' });

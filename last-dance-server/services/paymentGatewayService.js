@@ -217,8 +217,10 @@ class PaymentGatewayService {
           const TicketPurchase = require('../models/TicketPurchase');
           const VoteTransaction = require('../models/VoteTransaction');
           const ServiceBooking = require('../models/ServiceBooking');
+          const AccommodationListing = require('../models/AccommodationListing');
+          const AccommodationBooking = require('../models/AccommodationBooking');
 
-          const [alreadyTicket, alreadyVote, alreadyService] = await Promise.all([
+          const [alreadyTicket, alreadyVote, alreadyService, alreadyAccListing, alreadyAccBooking] = await Promise.all([
             TicketPurchase.findOne({ mpesaReceiptNumber: receipt, checkoutRequestID: { $ne: cleanRef } }),
             VoteTransaction.findOne({ mpesaReceiptNumber: receipt, checkoutRequestID: { $ne: cleanRef } }),
             ServiceBooking.findOne({
@@ -226,10 +228,12 @@ class PaymentGatewayService {
                 { depositReceiptNumber: receipt, depositCheckoutRequestID: { $ne: cleanRef } },
                 { balanceReceiptNumber: receipt, balanceCheckoutRequestID: { $ne: cleanRef } }
               ]
-            })
+            }),
+            AccommodationListing.findOne({ enlistingReceiptNumber: receipt, enlistingCheckoutRequestID: { $ne: cleanRef } }),
+            AccommodationBooking.findOne({ mpesaReceiptNumber: receipt, checkoutRequestID: { $ne: cleanRef } })
           ]);
 
-          if (alreadyTicket || alreadyVote || alreadyService) {
+          if (alreadyTicket || alreadyVote || alreadyService || alreadyAccListing || alreadyAccBooking) {
             console.warn(`[PaymentGatewayService] Security Alert: Receipt ${receipt} is already claimed by order. Rejecting match for ${cleanRef}.`);
             return null;
           }

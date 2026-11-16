@@ -284,6 +284,7 @@ export default function LastDanceLayout({ children }) {
 
   return (
     <div
+      suppressHydrationWarning
       className="
         flex
         min-h-screen
