@@ -21,6 +21,9 @@ const { sendGuestAccommodationEmail } = require('../utils/accommodationMailer');
 const ZONES = ['Campus Pavilion', 'Egerton Gate', 'Njokerio', 'Hostels Area', 'Town Center', 'Other'];
 const PROPERTY_TYPES = ['Bedsitter', '1 Bedroom', '2 Bedroom', 'Private Room', 'Hostel Room', 'Full House'];
 
+// In-memory OTP store to prevent 10s Mongoose buffering when DB is starting/reconnecting
+const memoryOtpStore = new Map();
+
 // Helper to retrieve accommodation settings with defaults
 async function getAccommodationSettings() {
     if (mongoose.connection.readyState !== 1) {
@@ -70,15 +73,37 @@ exports.sendHostOtp = async (req, res) => {
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-        // Upsert OTP record
-        await AccommodationOtp.findOneAndUpdate(
-            { phone: cleanPhone },
-            { otpCode, isVerified: false, expiresAt },
-            { upsert: true, new: true }
-        );
+        // Immediately store in memory cache (guarantees zero buffering delays)
+        memoryOtpStore.set(cleanPhone, {
+            phone: cleanPhone,
+            otpCode,
+            isVerified: false,
+            expiresAt
+        });
+
+        // Upsert OTP record in Mongo if DB connected
+        if (mongoose.connection.readyState === 1) {
+            try {
+                await AccommodationOtp.findOneAndUpdate(
+                    { phone: cleanPhone },
+                    { otpCode, isVerified: false, expiresAt },
+                    { upsert: true, new: true }
+                );
+            } catch (dbErr) {
+                console.warn('[Accommodations] DB OTP upsert warning:', dbErr.message);
+            }
+        }
 
         // Dispatch OTP via TextSMS Kenya
-        await sendAccommodationOtpSms({ phone: cleanPhone, otpCode });
+        const smsResult = await sendAccommodationOtpSms({ phone: cleanPhone, otpCode });
+        console.log(`[Accommodations] OTP SMS result for ${cleanPhone}:`, smsResult);
+
+        if (!smsResult.success) {
+            return res.status(502).json({
+                success: false,
+                message: `Failed to deliver SMS: ${smsResult.error || 'Gateway error'}. Please verify your phone number.`
+            });
+        }
 
         res.json({
             success: true,
@@ -87,7 +112,7 @@ exports.sendHostOtp = async (req, res) => {
         });
     } catch (err) {
         console.error('[Accommodations] sendHostOtp error:', err);
-        res.status(500).json({ success: false, message: 'Failed to send OTP code: ' + err.message });
+        res.status(500).json({ success: false, message: 'Failed to send OTP code: ' + (err.message || 'Server error') });
     }
 };
 
@@ -96,19 +121,34 @@ exports.sendHostOtp = async (req, res) => {
  */
 exports.verifyHostOtp = async (req, res) => {
     try {
-        const { phone, code } = req.body;
+        const phone = req.body.phone;
+        const code = req.body.code || req.body.otpCode;
         if (!phone || !code) {
-            return res.status(400).json({ success: false, message: 'Phone number and OTP code are required.' });
+            return res.status(400).json({ success: false, message: 'Phone number and verification code are required.' });
         }
 
         const cleanPhone = formatKenyanPhone(phone);
-        const record = await AccommodationOtp.findOne({ phone: cleanPhone });
+        let record = null;
+
+        // Try reading from MongoDB if connected
+        if (mongoose.connection.readyState === 1) {
+            try {
+                record = await AccommodationOtp.findOne({ phone: cleanPhone });
+            } catch (dbErr) {
+                console.warn('[Accommodations] DB OTP query warning:', dbErr.message);
+            }
+        }
+
+        // Fallback to in-memory OTP cache
+        if (!record && memoryOtpStore.has(cleanPhone)) {
+            record = memoryOtpStore.get(cleanPhone);
+        }
 
         if (!record) {
             return res.status(400).json({ success: false, message: 'No verification code was requested for this number.' });
         }
 
-        if (new Date() > record.expiresAt) {
+        if (new Date() > new Date(record.expiresAt)) {
             return res.status(400).json({ success: false, message: 'Verification code has expired. Please request a new one.' });
         }
 
@@ -116,8 +156,25 @@ exports.verifyHostOtp = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid verification code. Please check and try again.' });
         }
 
+        // Mark verified in memory
         record.isVerified = true;
-        await record.save();
+        memoryOtpStore.set(cleanPhone, {
+            ...record,
+            isVerified: true
+        });
+
+        // Persist to DB if connected
+        if (mongoose.connection.readyState === 1) {
+            try {
+                if (typeof record.save === 'function') {
+                    await record.save();
+                } else {
+                    await AccommodationOtp.findOneAndUpdate({ phone: cleanPhone }, { isVerified: true });
+                }
+            } catch (dbErr) {
+                console.warn('[Accommodations] DB OTP mark verified warning:', dbErr.message);
+            }
+        }
 
         res.json({
             success: true,
@@ -127,7 +184,7 @@ exports.verifyHostOtp = async (req, res) => {
         });
     } catch (err) {
         console.error('[Accommodations] verifyHostOtp error:', err);
-        res.status(500).json({ success: false, message: 'Failed to verify code: ' + err.message });
+        res.status(500).json({ success: false, message: 'Failed to verify code: ' + (err.message || 'Server error') });
     }
 };
 
@@ -187,8 +244,23 @@ exports.enlistProperty = async (req, res) => {
         const cleanWhatsApp = formatKenyanPhone(hostWhatsApp || hostPhone);
 
         // Verify phone possession check
-        const otpRecord = await AccommodationOtp.findOne({ phone: cleanPhone, isVerified: true });
-        if (!otpRecord) {
+        let isPhoneVerified = false;
+        if (mongoose.connection.readyState === 1) {
+            try {
+                const otpRecord = await AccommodationOtp.findOne({ phone: cleanPhone, isVerified: true });
+                if (otpRecord) isPhoneVerified = true;
+            } catch (dbErr) {
+                console.warn('[Accommodations] DB OTP verification lookup warning:', dbErr.message);
+            }
+        }
+        if (!isPhoneVerified && memoryOtpStore.has(cleanPhone)) {
+            const memRecord = memoryOtpStore.get(cleanPhone);
+            if (memRecord && memRecord.isVerified) {
+                isPhoneVerified = true;
+            }
+        }
+
+        if (!isPhoneVerified) {
             return res.status(400).json({ 
                 success: false, 
                 message: 'Please verify your phone number via SMS OTP before submitting your property.' 

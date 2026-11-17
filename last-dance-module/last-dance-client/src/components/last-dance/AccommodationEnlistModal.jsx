@@ -224,6 +224,7 @@ export default function AccommodationEnlistModal({ isOpen, onClose, onEnlistSucc
     try {
       const res = await axios.post(`${API_BASE_URL}/last-dance/accommodations/verify-otp`, {
         phone: hostPhone.trim(),
+        code: otpCode.trim(),
         otpCode: otpCode.trim()
       });
 
