@@ -223,7 +223,6 @@
 import EventInfoHero from './EventInfoHero';
 import EventTimeline from './EventTimeline';
 import OrganizingCommittee from './OrganizingCommittee';
-import EventContactEnlisting from './EventContactEnlisting';
 import EventFaq from './EventFaq';
 
 export default function EventInfoPage() {
@@ -238,8 +237,6 @@ export default function EventInfoPage() {
       <EventInfoHero />
 
       <EventTimeline />
-
-      <EventContactEnlisting />
 
       <OrganizingCommittee />
 

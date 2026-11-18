@@ -233,41 +233,16 @@ export default function AccommodationsPage() {
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div className="text-[12.5px] text-black/70 leading-relaxed max-w-2xl">
-              <div className="inline-flex items-center gap-2 mb-1 flex-wrap">
-                <span className="inline-block rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2.5 py-0.5">
-                  Host Promo: Free Enlisting for First 20 Hosts
-                </span>
-                <a
-                  href="https://wa.me/254708270176?text=Hi%20Last%20Dance%2C%20I%20would%20like%20to%20enlist%20my%20property%20for%20festival%20accommodation%20(Free%20enlisting%20for%20first%2020%20hosts)."
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[11.5px] font-bold text-emerald-600 hover:text-emerald-700 underline"
-                >
-                  enlisting for the first 20 hosts- dm 0708270176
-                </a>
-              </div>
-              <p>
-                <strong className="text-black">Neutral Marketplace Connector:</strong> Last Dance Festival connects festival attendees with local Egerton property hosts and does not own or insure properties. Hosts verify their phone via SMS OTP. If a host’s property remains unbooked, KES 50 of their KES 100 enlisting fee is refunded upon review.
-              </p>
+              <strong className="text-black">Neutral Marketplace Connector:</strong> Last Dance Festival connects festival attendees with local Egerton property hosts and does not own or insure properties. Hosts verify their phone via SMS OTP. If a host’s property remains unbooked, KES 50 of their KES 100 enlisting fee is refunded upon review.
             </div>
           </div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
-            <a
-              href="https://wa.me/254708270176?text=Hi%20Last%20Dance%2C%20I%20would%20like%20to%20enlist%20my%20property%20for%20festival%20accommodation%20(Free%20enlisting%20for%20first%2020%20hosts)."
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 rounded-full bg-[#25D366] text-white px-3.5 py-1.5 text-xs font-bold shadow-xs hover:bg-[#20ba59] transition"
-            >
-              <span>DM 0708270176</span>
-            </a>
-            <button
-              type="button"
-              onClick={() => setIsEnlistModalOpen(true)}
-              className="text-[12.5px] font-bold text-[#5e2590] hover:text-[#762e99] underline shrink-0 whitespace-nowrap text-center sm:text-left"
-            >
-              Enlist Room &rarr;
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsEnlistModalOpen(true)}
+            className="text-[12.5px] font-bold text-[#5e2590] hover:text-[#762e99] underline shrink-0 whitespace-nowrap"
+          >
+            Got a room? Enlist today &rarr;
+          </button>
         </div>
 
         {/* =============================================
