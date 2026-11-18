@@ -44,8 +44,11 @@ async function sendSms({ phone, message }) {
     }
 
     if (!TEXTSMS_API_KEY || !PARTNER_ID) {
-        console.warn('[TextSMS] Credentials missing. Mocking SMS dispatch to', formattedPhone, ':\n', message);
-        return { success: true, mocked: true, message: 'TextSMS credentials not configured; simulated send' };
+        console.warn('[TextSMS] Credentials missing on server! TEXTSMS_API_KEY or PARTNER_ID is not configured.');
+        return { 
+            success: false, 
+            error: 'SMS service credentials (TEXTSMS_API_KEY / PARTNER_ID) are not configured in the server environment.' 
+        };
     }
 
     try {
@@ -71,15 +74,23 @@ async function sendSms({ phone, message }) {
         const resData = response.data || {};
         
         // Handle common response formats from TextSMS / Advanta
+        const firstResp = Array.isArray(resData.responses) ? resData.responses[0] : null;
         const isSuccess = 
             resData.response_code === 200 || 
             resData.success === true || 
-            (resData.responses && resData.responses[0]?.['response-code'] === 200) ||
+            (firstResp && (firstResp['response-code'] === 200 || firstResp.response_code === 200)) ||
             resData.status === 'success';
 
+        const gatewayError = 
+            (firstResp && firstResp['response-description'] && firstResp['response-code'] !== 200 ? firstResp['response-description'] : null) ||
+            resData.message || 
+            resData.description || 
+            (isSuccess ? null : 'Gateway rejected SMS dispatch');
+
         return {
-            success: true,
-            data: resData
+            success: isSuccess,
+            data: resData,
+            error: isSuccess ? null : gatewayError
         };
     } catch (err) {
         console.error('[TextSMS] Gateway dispatch error:', err.response?.data || err.message);

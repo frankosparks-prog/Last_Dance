@@ -837,7 +837,96 @@ exports.adminGetListings = async (req, res) => {
 };
 
 /**
- * 12. Admin: Update Listing Status (Moderate / Approve / Reject / Unlist)
+ * 12. Admin: Directly Enlist Property (No OTP verification, No M-Pesa fee, Immediately Active)
+ */
+exports.adminEnlistListing = async (req, res) => {
+    try {
+        const {
+            title,
+            propertyType,
+            locationZone,
+            specificAddress,
+            description,
+            pricePerNightKES,
+            maxGuests,
+            bedrooms,
+            beds,
+            amenities,
+            houseRules,
+            images,
+            hostName,
+            hostPhone,
+            hostWhatsApp,
+            adminNotes
+        } = req.body;
+
+        if (!title || !propertyType || !locationZone || !specificAddress || !pricePerNightKES || !hostName || !hostPhone) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Please fill in all required property, location, and host contact details.' 
+            });
+        }
+
+        if (!images || !Array.isArray(images) || images.length < 1) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Please provide at least 1 photo for the listing.' 
+            });
+        }
+
+        const cleanPhone = formatKenyanPhone(hostPhone);
+        const cleanWhatsApp = formatKenyanPhone(hostWhatsApp || hostPhone);
+        const listingRef = `HS-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+
+        const listing = await AccommodationListing.create({
+            listingRef,
+            title: title.trim(),
+            propertyType,
+            locationZone,
+            specificAddress: specificAddress.trim(),
+            description: description ? description.trim() : '',
+            pricePerNightKES: Number(pricePerNightKES),
+            maxGuests: Number(maxGuests) || 2,
+            bedrooms: Number(bedrooms) || 1,
+            beds: Number(beds) || 1,
+            amenities: Array.isArray(amenities) ? amenities : [],
+            houseRules: houseRules || {
+                noParties: true,
+                noSmoking: true,
+                noExtraVisitors: true,
+                quietHours: '10:00 PM - 6:00 AM'
+            },
+            images,
+            hostName: hostName.trim(),
+            hostPhone: cleanPhone,
+            hostWhatsApp: cleanWhatsApp,
+            isPhoneVerified: true, // Auto-verified by Admin
+            termsAccepted: true,
+            termsAcceptedAt: new Date(),
+            enlistingFeeKES: 0,
+            enlistingPaymentStatus: 'completed',
+            enlistingReceiptNumber: `ADMIN-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+            enlistingPaidAt: new Date(),
+            refundEligible: false,
+            refundAmountKES: 0,
+            refundStatus: 'not_applicable',
+            adminNotes: adminNotes || 'Directly enlisted via Admin Panel',
+            status: 'active'
+        });
+
+        res.json({
+            success: true,
+            message: `Property "${listing.title}" enlisted successfully and is now active on the marketplace!`,
+            listing
+        });
+    } catch (err) {
+        console.error('[Accommodations Admin] adminEnlistListing error:', err);
+        res.status(500).json({ success: false, message: 'Failed to create listing: ' + (err.message || 'Server error') });
+    }
+};
+
+/**
+ * 13. Admin: Update Listing Status (Moderate / Approve / Reject / Deactivate / Reactivate)
  */
 exports.adminUpdateListingStatus = async (req, res) => {
     try {
@@ -851,7 +940,11 @@ exports.adminUpdateListingStatus = async (req, res) => {
 
         const listing = await AccommodationListing.findByIdAndUpdate(
             id,
-            { status, adminNotes: adminNotes ? adminNotes.trim() : undefined },
+            { 
+                status, 
+                adminNotes: adminNotes ? adminNotes.trim() : undefined,
+                updatedAt: new Date()
+            },
             { new: true }
         );
 
@@ -859,7 +952,11 @@ exports.adminUpdateListingStatus = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Listing not found.' });
         }
 
-        res.json({ success: true, message: `Status updated to ${status}.`, listing });
+        const statusMessage = status === 'unlisted' ? 'Listing has been deactivated (unlisted from public marketplace).' :
+                              status === 'active' ? 'Listing is now active on the marketplace.' :
+                              `Status updated to ${status}.`;
+
+        res.json({ success: true, message: statusMessage, listing });
     } catch (err) {
         console.error('[Accommodations Admin] adminUpdateListingStatus error:', err);
         res.status(500).json({ success: false, message: err.message });

@@ -49,6 +49,9 @@ router.get('/booking/:bookingRef', accommodationController.getBookingByRef);
 // 11. Admin: Get all listings with host details
 router.get('/admin/listings', protect, role('admin'), accommodationController.adminGetListings);
 
+// 11b. Admin: Directly enlist property (no OTP, no M-Pesa fee, immediately active)
+router.post('/admin/listings', protect, role('admin'), accommodationController.adminEnlistListing);
+
 // 12. Admin: Update listing status (moderate, approve, reject, unlist)
 router.patch('/admin/listings/:id/status', protect, role('admin'), accommodationController.adminUpdateListingStatus);
 
