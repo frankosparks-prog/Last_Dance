@@ -152,7 +152,9 @@ export default function AccommodationBookingModal({ listing, isOpen, onClose, on
         guestCount: Number(guestCount) || 1,
         checkInDate,
         checkOutDate,
-        guestNotes: guestNotes.trim()
+        guestNotes: guestNotes.trim(),
+        termsAccepted: disclaimerAccepted,
+        disclaimerAccepted: disclaimerAccepted
       };
 
       const res = await axios.post(`${API_BASE_URL}/last-dance/accommodations/book`, payload);

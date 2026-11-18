@@ -44,7 +44,7 @@ const AMENITIES_OPTIONS = [
   'Vehicle Parking Space'
 ];
 
-export default function AccommodationEnlistModal({ isOpen, onClose, onEnlistSuccess }) {
+export default function AccommodationEnlistModal({ isOpen, onClose, onEnlistSuccess, isAdmin = false }) {
   // Step state: 'form' | 'otp' | 'payment_prompt' | 'polling' | 'success' | 'failed'
   const [currentStep, setCurrentStep] = useState(1); // 1: Specs, 2: Photos & Rules, 3: Host & OTP, 4: Fee & Terms
   const [modalStage, setModalStage] = useState('wizard'); // 'wizard' | 'polling' | 'success' | 'failed'
@@ -320,9 +320,60 @@ export default function AccommodationEnlistModal({ isOpen, onClose, onEnlistSucc
     };
   }, [modalStage, checkoutRequestID, verifyEnlistingPayment]);
 
-  // Final Submit: Triggers KES 100 Enlisting STK Push
+  // Final Submit: Direct Admin Enlist OR Public Host KES 100 Enlisting STK Push
   const handleSubmitEnlistment = async () => {
     setErrorMessage('');
+
+    // Admin direct enlistment bypass
+    if (isAdmin) {
+      setModalStage('polling');
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+        const payload = {
+          title: title.trim(),
+          propertyType,
+          locationZone,
+          specificAddress: specificAddress.trim(),
+          description: specificAddress.trim(),
+          pricePerNightKES: Number(pricePerNightKES),
+          maxGuests: Number(maxGuests),
+          bedrooms: Number(bedrooms),
+          beds: Number(beds),
+          amenities: selectedAmenities,
+          houseRules: {
+            noParties: ruleNoParties,
+            noSmoking: ruleNoSmoking,
+            quietHours: ruleQuietHours,
+            extraVisitors: ruleExtraVisitors,
+            customRules: customRules.trim()
+          },
+          images,
+          hostName: hostName.trim(),
+          hostPhone: hostPhone.trim(),
+          hostWhatsApp: hostWhatsApp.trim() || hostPhone.trim(),
+          adminNotes: 'Directly enlisted via Admin Panel'
+        };
+
+        const res = await axios.post(
+          `${API_BASE_URL}/last-dance/accommodations/admin/listings`,
+          payload,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (res.data?.success) {
+          setListingRef(res.data.listing?.listingRef || 'HS-ADMIN');
+          setModalStage('success');
+          if (onEnlistSuccess) onEnlistSuccess(res.data.listing);
+        } else {
+          throw new Error(res.data?.message || 'Failed to enlist property');
+        }
+      } catch (err) {
+        const msg = err.response?.data?.message || err.message || 'Admin enlisting failed.';
+        setErrorMessage(msg);
+        setModalStage('failed');
+      }
+      return;
+    }
 
     if (!termsAccepted) {
       setErrorMessage('You must accept the Connector Terms of Service to enlist.');
@@ -392,7 +443,7 @@ export default function AccommodationEnlistModal({ isOpen, onClose, onEnlistSucc
   // Step Validation Checkers
   const canProceedStep1 = title.trim().length >= 4 && Number(pricePerNightKES) > 0 && specificAddress.trim().length >= 4;
   const canProceedStep2 = images.length >= 1;
-  const canProceedStep3 = hostName.trim().length >= 2 && isOtpVerified;
+  const canProceedStep3 = hostName.trim().length >= 2 && (isAdmin || isOtpVerified);
 
   if (!isOpen) return null;
 
@@ -410,10 +461,10 @@ export default function AccommodationEnlistModal({ isOpen, onClose, onEnlistSucc
             </div>
             <div>
               <span className="text-[11px] font-medium uppercase tracking-wider text-black/50">
-                Host Portal • Last Dance Stays
+                {isAdmin ? 'Admin Portal • Stays Management' : 'Host Portal • Last Dance Stays'}
               </span>
               <h3 className="text-[17px] sm:text-[18px] font-medium text-black leading-tight">
-                Enlist Your Room or House
+                {isAdmin ? 'Enlist New Accommodation (Admin)' : 'Enlist Your Room or House'}
               </h3>
             </div>
           </div>
@@ -457,7 +508,7 @@ export default function AccommodationEnlistModal({ isOpen, onClose, onEnlistSucc
                 currentStep === 3 ? 'border-[#5e2590] text-[#5e2590] bg-white font-bold' : 'border-transparent'
               }`}
             >
-              3. Phone &amp; OTP
+              {isAdmin ? '3. Host Contacts' : '3. Phone & OTP'}
             </button>
             <button
               type="button"
@@ -794,15 +845,27 @@ export default function AccommodationEnlistModal({ isOpen, onClose, onEnlistSucc
 
           {modalStage === 'wizard' && currentStep === 3 && (
             <div className="space-y-4">
-              <div className="rounded-2xl border border-purple-100 bg-purple-50/50 p-4 space-y-1">
-                <h4 className="text-[13px] font-bold text-[#5e2590] flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Host Legitimacy &amp; Identity Verification</span>
-                </h4>
-                <p className="text-[12px] text-black/70 leading-relaxed">
-                  To protect attendees from fraudulent listings, all property hosts must verify their phone number via an SMS verification code powered by TextSMS Kenya.
-                </p>
-              </div>
+              {isAdmin ? (
+                <div className="rounded-2xl border border-purple-200 bg-purple-50/70 p-4 space-y-1">
+                  <h4 className="text-[13px] font-bold text-[#5e2590] flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Admin Mode: Direct Host Enlisting</span>
+                  </h4>
+                  <p className="text-[12px] text-purple-950 leading-relaxed">
+                    Phone verification via SMS OTP is bypassed for administrators. Fill in the host contact details below to directly publish this accommodation.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-purple-100 bg-purple-50/50 p-4 space-y-1">
+                  <h4 className="text-[13px] font-bold text-[#5e2590] flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Host Legitimacy &amp; Identity Verification</span>
+                  </h4>
+                  <p className="text-[12px] text-black/70 leading-relaxed">
+                    To protect attendees from fraudulent listings, all property hosts must verify their phone number via an SMS verification code powered by TextSMS Kenya.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-[12.5px] font-medium text-black/75 mb-1">
@@ -827,37 +890,48 @@ export default function AccommodationEnlistModal({ isOpen, onClose, onEnlistSucc
                   <input
                     type="tel"
                     required
-                    disabled={isOtpVerified}
+                    disabled={!isAdmin && isOtpVerified}
                     placeholder="e.g. 0712345678"
                     value={hostPhone}
                     onChange={(e) => {
                       setHostPhone(e.target.value);
-                      setIsOtpVerified(false);
-                      setOtpSent(false);
+                      if (!isAdmin) {
+                        setIsOtpVerified(false);
+                        setOtpSent(false);
+                      }
                     }}
                     className="flex-1 px-4 py-2.5 rounded-xl border border-black/15 text-[13.5px] focus:outline-hidden focus:border-[#5e2590] disabled:bg-black/5"
                   />
-                  {!isOtpVerified && (
-                    <button
-                      type="button"
-                      disabled={otpLoading || !hostPhone || hostPhone.length < 9}
-                      onClick={handleSendOtp}
-                      className="px-4 py-2.5 rounded-xl bg-[#5e2590] hover:bg-[#762e99] text-white text-[12.5px] font-medium transition disabled:opacity-40 shrink-0"
-                    >
-                      {otpLoading ? 'Sending...' : otpSent ? 'Resend SMS' : 'Send SMS OTP'}
-                    </button>
-                  )}
-                  {isOtpVerified && (
-                    <div className="px-4 py-2.5 rounded-xl bg-emerald-100 text-emerald-800 text-[12.5px] font-bold flex items-center gap-1.5 shrink-0">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Verified</span>
+                  {isAdmin ? (
+                    <div className="px-3.5 py-2.5 rounded-xl bg-purple-100 text-[#5e2590] text-[12px] font-bold flex items-center gap-1.5 shrink-0">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Admin Verified</span>
                     </div>
+                  ) : (
+                    <>
+                      {!isOtpVerified && (
+                        <button
+                          type="button"
+                          disabled={otpLoading || !hostPhone || hostPhone.length < 9}
+                          onClick={handleSendOtp}
+                          className="px-4 py-2.5 rounded-xl bg-[#5e2590] hover:bg-[#762e99] text-white text-[12.5px] font-medium transition disabled:opacity-40 shrink-0"
+                        >
+                          {otpLoading ? 'Sending...' : otpSent ? 'Resend SMS' : 'Send SMS OTP'}
+                        </button>
+                      )}
+                      {isOtpVerified && (
+                        <div className="px-4 py-2.5 rounded-xl bg-emerald-100 text-emerald-800 text-[12.5px] font-bold flex items-center gap-1.5 shrink-0">
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Verified</span>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
 
-              {/* OTP Input Row if sent and not yet verified */}
-              {otpSent && !isOtpVerified && (
+              {/* OTP Input Row if sent and not yet verified (only for public hosts) */}
+              {!isAdmin && otpSent && !isOtpVerified && (
                 <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/50 space-y-2">
                   <label className="block text-[12px] font-medium text-amber-900">
                     Enter the 6-digit code received on {hostPhone}
@@ -954,24 +1028,38 @@ export default function AccommodationEnlistModal({ isOpen, onClose, onEnlistSucc
                 <p><strong>Uploaded Photos:</strong> {images.length} verified image(s)</p>
               </div>
 
-              {/* Host Legitimacy Fee & KES 50 Unbooked Refund Guarantee Box */}
-              <div className="rounded-2xl border-2 border-purple-200 bg-purple-50/70 p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-[#5e2590] uppercase tracking-wider">
-                    Host Enlisting Fee &amp; Refund Guarantee
-                  </span>
-                  <span className="text-[16px] font-bold text-[#5e2590]">KES 100</span>
+              {/* Host Legitimacy Fee & KES 50 Unbooked Refund Guarantee Box (or Admin Fee Waived) */}
+              {isAdmin ? (
+                <div className="rounded-2xl border-2 border-purple-200 bg-purple-50/70 p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#5e2590] uppercase tracking-wider">
+                      Admin Publishing Privilege
+                    </span>
+                    <span className="text-[13px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">Fee Waived (KES 0)</span>
+                  </div>
+                  <p className="text-[12px] text-purple-950 leading-relaxed">
+                    As an administrator, this accommodation listing will be published directly to the public marketplace with immediate <strong className="text-emerald-700">ACTIVE</strong> status without requiring an M-Pesa enlisting fee or OTP verification.
+                  </p>
                 </div>
-                <p className="text-[12px] text-black/75 leading-relaxed">
-                  A small commitment deposit of <strong className="text-black">KES 100</strong> is required to enlist your house. This prevents spam and guarantees genuine availability for festival attendees.
-                </p>
-                <div className="p-2.5 rounded-xl bg-white border border-purple-200 flex items-start gap-2 text-[11.5px] text-[#5e2590]">
-                  <Sparkles className="w-4 h-4 shrink-0 mt-0.5" />
-                  <div>
-                    <strong>Unbooked Refund Policy:</strong> If no attendee books your property during the festival period, you are eligible to receive a <strong className="underline">KES 50 refund</strong>, reviewable via our festival desk.
+              ) : (
+                <div className="rounded-2xl border-2 border-purple-200 bg-purple-50/70 p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#5e2590] uppercase tracking-wider">
+                      Host Enlisting Fee &amp; Refund Guarantee
+                    </span>
+                    <span className="text-[16px] font-bold text-[#5e2590]">KES 100</span>
+                  </div>
+                  <p className="text-[12px] text-black/75 leading-relaxed">
+                    A small commitment deposit of <strong className="text-black">KES 100</strong> is required to enlist your house. This prevents spam and guarantees genuine availability for festival attendees.
+                  </p>
+                  <div className="p-2.5 rounded-xl bg-white border border-purple-200 flex items-start gap-2 text-[11.5px] text-[#5e2590]">
+                    <Sparkles className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                      <strong>Unbooked Refund Policy:</strong> If no attendee books your property during the festival period, you are eligible to receive a <strong className="underline">KES 50 refund</strong>, reviewable via our festival desk.
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Connector Terms of Service Disclaimer Checkbox */}
               <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 space-y-2">
@@ -1004,15 +1092,26 @@ export default function AccommodationEnlistModal({ isOpen, onClose, onEnlistSucc
                   <ArrowLeft className="w-4 h-4" />
                   <span>Back</span>
                 </button>
-                <button
-                  type="button"
-                  disabled={!termsAccepted}
-                  onClick={handleSubmitEnlistment}
-                  className="px-7 py-3 rounded-full bg-[#5e2590] hover:bg-[#762e99] text-white text-[13.5px] font-medium transition disabled:opacity-40 shadow-md flex items-center gap-2"
-                >
-                  <span>Pay KES 100 &amp; Enlist Listing</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={handleSubmitEnlistment}
+                    className="px-7 py-3 rounded-full bg-[#5e2590] hover:bg-[#762e99] text-white text-[13.5px] font-medium transition shadow-md flex items-center gap-2"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Publish &amp; Activate Listing (Admin)</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!termsAccepted}
+                    onClick={handleSubmitEnlistment}
+                    className="px-7 py-3 rounded-full bg-[#5e2590] hover:bg-[#762e99] text-white text-[13.5px] font-medium transition disabled:opacity-40 shadow-md flex items-center gap-2"
+                  >
+                    <span>Pay KES 100 &amp; Enlist Listing</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -1023,18 +1122,24 @@ export default function AccommodationEnlistModal({ isOpen, onClose, onEnlistSucc
               <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
                 <div className="absolute inset-0 rounded-full border-4 border-purple-100" />
                 <div className="absolute inset-0 rounded-full border-4 border-[#5e2590] border-t-transparent animate-spin" />
-                <Smartphone className="w-8 h-8 text-[#5e2590]" />
+                <Home className="w-8 h-8 text-[#5e2590]" />
               </div>
 
               <div>
-                <h4 className="text-[18px] font-bold text-black">Authorize Host Enlisting Fee</h4>
+                <h4 className="text-[18px] font-bold text-black">
+                  {isAdmin ? 'Publishing Listing to Marketplace...' : 'Authorize Host Enlisting Fee'}
+                </h4>
                 <p className="text-[13px] text-black/65 mt-1 max-w-sm mx-auto">
-                  An M-Pesa prompt for <strong className="text-black">KES 100</strong> has been sent to <strong className="text-black">{hostPhone}</strong>. Enter your PIN to activate your listing.
+                  {isAdmin 
+                    ? 'Registering and activating accommodation listing directly on the marketplace...'
+                    : `An M-Pesa prompt for KES 100 has been sent to ${hostPhone}. Enter your PIN to activate your listing.`}
                 </p>
-                <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 text-[#5e2590] text-[12px] font-medium">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Awaiting payment ({pollCountdown}s)</span>
-                </div>
+                {!isAdmin && (
+                  <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 text-[#5e2590] text-[12px] font-medium">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Awaiting payment ({pollCountdown}s)</span>
+                  </div>
+                )}
               </div>
 
               {errorMessage && (
@@ -1043,37 +1148,39 @@ export default function AccommodationEnlistModal({ isOpen, onClose, onEnlistSucc
                 </div>
               )}
 
-              <div className="pt-2 flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={handleManualVerify}
-                  disabled={isVerifyingManually}
-                  className="w-full py-2.5 rounded-full border border-[#5e2590] text-[#5e2590] hover:bg-purple-50 text-[13px] font-medium transition flex items-center justify-center gap-1.5 disabled:opacity-50"
-                >
-                  {isVerifyingManually ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Checking with Safaricom...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4" />
-                      <span>I have entered my PIN — Verify Payment</span>
-                    </>
-                  )}
-                </button>
+              {!isAdmin && (
+                <div className="pt-2 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={handleManualVerify}
+                    disabled={isVerifyingManually}
+                    className="w-full py-2.5 rounded-full border border-[#5e2590] text-[#5e2590] hover:bg-purple-50 text-[13px] font-medium transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isVerifyingManually ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Checking with Safaricom...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>I have entered my PIN — Verify Payment</span>
+                      </>
+                    )}
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModalStage('wizard');
-                    setCurrentStep(4);
-                  }}
-                  className="text-[12px] text-black/45 hover:text-black py-1 transition"
-                >
-                  Cancel or review details
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalStage('wizard');
+                      setCurrentStep(4);
+                    }}
+                    className="text-[12px] text-black/45 hover:text-black py-1 transition"
+                  >
+                    Cancel or review details
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -1084,9 +1191,13 @@ export default function AccommodationEnlistModal({ isOpen, onClose, onEnlistSucc
                 <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center">
                   <CheckCircle2 className="w-8 h-8" />
                 </div>
-                <h4 className="text-[20px] font-bold text-black">Listing is Now Live!</h4>
+                <h4 className="text-[20px] font-bold text-black">
+                  {isAdmin ? 'Property Successfully Enlisted by Admin!' : 'Listing is Now Live!'}
+                </h4>
                 <p className="text-[13px] text-black/60 max-w-sm mx-auto">
-                  Your property has been successfully enlisted on the Last Dance Marketplace.
+                  {isAdmin
+                    ? 'The property is now immediately ACTIVE on the public accommodations marketplace.'
+                    : 'Your property has been successfully enlisted on the Last Dance Marketplace.'}
                 </p>
               </div>
 

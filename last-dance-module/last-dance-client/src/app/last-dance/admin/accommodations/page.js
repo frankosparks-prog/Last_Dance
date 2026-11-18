@@ -5,9 +5,10 @@ import {
   Home, ShieldCheck, DollarSign, RefreshCw, CheckCircle2, 
   XCircle, AlertCircle, Search, Filter, Phone, MapPin, 
   Users, Bed, MessageSquare, ExternalLink, ArrowRight, 
-  Receipt, Sparkles, Settings, Eye, Check, AlertTriangle
+  Receipt, Sparkles, Settings, Eye, Check, AlertTriangle, Plus
 } from 'lucide-react';
 import axios from 'axios';
+import AccommodationEnlistModal from '@/components/last-dance/AccommodationEnlistModal';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -16,6 +17,7 @@ export default function AdminAccommodationsPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', text: '' });
+  const [isEnlistModalOpen, setIsEnlistModalOpen] = useState(false);
 
   // Metrics
   const [metrics, setMetrics] = useState({
@@ -244,19 +246,30 @@ export default function AdminAccommodationsPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            fetchMetrics();
-            if (activeTab === 'listings' || activeTab === 'refunds') fetchListings();
-            if (activeTab === 'ledger') fetchTransactions();
-            if (activeTab === 'settings') fetchSettings();
-          }}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-black/15 bg-white text-[12.5px] font-medium text-black/75 hover:border-[#5e2590] hover:text-[#5e2590] transition shadow-2xs"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh Data</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsEnlistModalOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5e2590] text-white text-[12.5px] font-bold hover:bg-[#762e99] transition shadow-xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Enlist Property (Admin)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              fetchMetrics();
+              if (activeTab === 'listings' || activeTab === 'refunds') fetchListings();
+              if (activeTab === 'ledger') fetchTransactions();
+              if (activeTab === 'settings') fetchSettings();
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-black/15 bg-white text-[12.5px] font-medium text-black/75 hover:border-[#5e2590] hover:text-[#5e2590] transition shadow-2xs"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh Data</span>
+          </button>
+        </div>
       </div>
 
       {/* Notification banner */}
@@ -380,6 +393,15 @@ export default function AdminAccommodationsPage() {
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setIsEnlistModalOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#5e2590] text-white text-[12.5px] font-bold hover:bg-[#762e99] transition shadow-2xs shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Enlist Property</span>
+              </button>
+
               <select
                 value={listingStatusFilter}
                 onChange={(e) => setListingStatusFilter(e.target.value)}
@@ -389,7 +411,7 @@ export default function AdminAccommodationsPage() {
                 <option value="active">Active</option>
                 <option value="booked">Booked</option>
                 <option value="rejected">Rejected</option>
-                <option value="unlisted">Unlisted</option>
+                <option value="unlisted">Deactivated (Unlisted)</option>
               </select>
             </div>
           </div>
@@ -469,22 +491,33 @@ export default function AdminAccommodationsPage() {
                             l.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
                             l.status === 'booked' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
                             l.status === 'rejected' ? 'bg-red-50 text-red-700 border border-red-200' :
-                            'bg-gray-100 text-gray-700 border border-gray-200'
+                            'bg-amber-50 text-amber-800 border border-amber-200'
                           }`}>
-                            {l.status}
+                            {l.status === 'unlisted' ? 'Deactivated' : l.status}
                           </span>
                         </td>
 
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {l.status !== 'active' && (
+                            {l.status === 'active' ? (
+                              <button
+                                type="button"
+                                disabled={actionLoading}
+                                onClick={() => handleUpdateListingStatus(l._id, 'unlisted')}
+                                className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[11.5px] font-medium transition"
+                                title="Deactivate and remove from public marketplace"
+                              >
+                                Deactivate
+                              </button>
+                            ) : (
                               <button
                                 type="button"
                                 disabled={actionLoading}
                                 onClick={() => handleUpdateListingStatus(l._id, 'active')}
                                 className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11.5px] font-medium transition"
+                                title="Activate and show on public marketplace"
                               >
-                                Approve
+                                Activate
                               </button>
                             )}
 
@@ -496,17 +529,6 @@ export default function AdminAccommodationsPage() {
                                 className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[11.5px] font-medium transition"
                               >
                                 Reject
-                              </button>
-                            )}
-
-                            {l.status !== 'unlisted' && (
-                              <button
-                                type="button"
-                                disabled={actionLoading}
-                                onClick={() => handleUpdateListingStatus(l._id, 'unlisted')}
-                                className="px-2.5 py-1 rounded-lg border border-black/15 text-black hover:bg-black/5 text-[11.5px] font-medium transition"
-                              >
-                                Unlist
                               </button>
                             )}
                           </div>
@@ -799,6 +821,19 @@ export default function AdminAccommodationsPage() {
           </form>
         </div>
       )}
+
+      {/* Admin Enlist Modal */}
+      <AccommodationEnlistModal
+        isOpen={isEnlistModalOpen}
+        onClose={() => setIsEnlistModalOpen(false)}
+        isAdmin={true}
+        onEnlistSuccess={() => {
+          setIsEnlistModalOpen(false);
+          fetchListings();
+          fetchMetrics();
+          showNotification('success', 'Property successfully enlisted by Admin and is now ACTIVE!');
+        }}
+      />
 
     </div>
   );

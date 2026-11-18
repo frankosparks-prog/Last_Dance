@@ -566,17 +566,19 @@ exports.bookAccommodation = async (req, res) => {
             termsAccepted
         } = req.body;
 
-        if (!termsAccepted) {
+        const isTermsAccepted = termsAccepted || req.body.disclaimerAccepted;
+
+        if (!isTermsAccepted) {
             return res.status(400).json({ 
                 success: false, 
                 message: 'You must accept the Platform Terms of Service acknowledging the platform is a connector only.' 
             });
         }
 
-        if (!listingId || !guestName || !guestPhone || !guestEmail || !checkInDate) {
+        if (!listingId || !guestName || !guestPhone || !checkInDate) {
             return res.status(400).json({ 
                 success: false, 
-                message: 'Guest Name, Phone, Email, and Check-in Date are required.' 
+                message: 'Guest Name, Phone, and Check-in Date are required.' 
             });
         }
 
