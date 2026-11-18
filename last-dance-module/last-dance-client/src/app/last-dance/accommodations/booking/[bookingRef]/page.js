@@ -103,12 +103,18 @@ export default function AccommodationBookingDetailsPage() {
 
   const isCompleted = booking.paymentStatus === 'completed';
   const listing = booking.listing || {};
-  const host = booking.hostSnapshot || {};
+  const host = booking.hostDetails || booking.hostSnapshot || (listing ? {
+    name: listing.hostName,
+    phone: listing.hostPhone,
+    whatsApp: listing.hostWhatsApp || listing.hostPhone,
+    specificAddress: listing.specificAddress
+  } : {});
   const rules = listing.houseRules || {};
 
-  const cleanWhatsApp = host?.whatsApp ? host.whatsApp.replace(/[^0-9]/g, '') : '';
+  const rawWa = host?.whatsApp || host?.phone || listing?.hostWhatsApp || listing?.hostPhone || '';
+  const cleanWhatsApp = rawWa ? String(rawWa).replace(/[^0-9]/g, '') : '';
   const whatsappUrl = cleanWhatsApp
-    ? `https://wa.me/${cleanWhatsApp}?text=${encodeURIComponent(`Hi ${host.name || 'Host'}, I have confirmed booking ${booking.bookingRef} for "${listing.title || 'your property'}" on Last Dance Accommodations. Connecting regarding check-in & directions.`)}`
+    ? `https://wa.me/${cleanWhatsApp}?text=${encodeURIComponent(`Hi ${host?.name || 'Host'}, I have confirmed booking ${booking.bookingRef} for "${listing?.title || 'your property'}" on Last Dance Accommodations. Connecting regarding check-in & directions.`)}`
     : null;
 
   return (
@@ -199,18 +205,30 @@ export default function AccommodationBookingDetailsPage() {
                   </div>
                 </div>
 
-                {whatsappUrl && (
-                  <a
-                    href={whatsappUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[13px] font-medium transition shadow-sm shrink-0"
-                  >
-                    <MessageSquare className="w-4 h-4" />
-                    <span>Chat on WhatsApp</span>
-                    <ExternalLink className="w-3.5 h-3.5 opacity-80" />
-                  </a>
-                )}
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
+                  {whatsappUrl && (
+                    <a
+                      href={whatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[13px] font-medium transition shadow-sm shrink-0"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      <span>Chat on WhatsApp</span>
+                      <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+                    </a>
+                  )}
+
+                  {host.phone && (
+                    <a
+                      href={`tel:${host.phone}`}
+                      className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full bg-white hover:bg-emerald-100 text-emerald-950 border border-emerald-300 text-[13px] font-medium transition shadow-2xs shrink-0"
+                    >
+                      <Phone className="w-4 h-4 text-emerald-700" />
+                      <span>Call Host</span>
+                    </a>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[13px]">
@@ -223,9 +241,29 @@ export default function AccommodationBookingDetailsPage() {
                   <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Calling Handset</p>
                   <p className="font-bold text-black text-[15px] flex items-center gap-1.5">
                     <Phone className="w-4 h-4 text-emerald-700" />
-                    <a href={`tel:${host.phone}`} className="hover:underline">{host.phone || 'Provided via SMS'}</a>
+                    {host.phone ? (
+                      <a href={`tel:${host.phone}`} className="hover:underline text-emerald-950 font-bold">{host.phone}</a>
+                    ) : (
+                      <span className="text-black/60 font-medium">Provided via SMS</span>
+                    )}
                   </p>
                 </div>
+
+                {(host.whatsApp || whatsappUrl) && (
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">WhatsApp Number</p>
+                    <p className="font-bold text-black text-[15px] flex items-center gap-1.5">
+                      <MessageSquare className="w-4 h-4 text-emerald-700" />
+                      {whatsappUrl ? (
+                        <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="hover:underline text-emerald-950 font-bold">
+                          {host.whatsApp || host.phone}
+                        </a>
+                      ) : (
+                        <span>{host.whatsApp || host.phone}</span>
+                      )}
+                    </p>
+                  </div>
+                )}
 
                 <div className="sm:col-span-2 space-y-1 pt-1">
                   <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">

@@ -67,7 +67,8 @@ export default function AccommodationBookingModal({ listing, isOpen, onClose, on
               guestPhone,
               checkInDate,
               checkOutDate,
-              hostSnapshot: res.data.booking?.hostSnapshot || null,
+              hostSnapshot: res.data.booking?.hostDetails || res.data.booking?.hostSnapshot || res.data.hostDetails || null,
+              hostDetails: res.data.booking?.hostDetails || res.data.booking?.hostSnapshot || res.data.hostDetails || null,
               paymentStatus: 'completed',
               receiptNumber: res.data.receipt || '',
               createdAt: new Date().toISOString()
@@ -186,9 +187,16 @@ export default function AccommodationBookingModal({ listing, isOpen, onClose, on
 
   if (!isOpen || !listing) return null;
 
-  const hostSnapshot = bookingData?.hostSnapshot;
-  const whatsappUrl = hostSnapshot?.whatsApp 
-    ? `https://wa.me/${hostSnapshot.whatsApp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hi ${hostSnapshot.name || 'Host'}, I have confirmed my booking (${bookingRef}) for "${listing.title}" on Last Dance Accommodations. Looking forward to connecting!`)}`
+  const hostSnapshot = bookingData?.hostDetails || bookingData?.hostSnapshot || (listing ? {
+    name: listing.hostName,
+    phone: listing.hostPhone,
+    whatsApp: listing.hostWhatsApp || listing.hostPhone,
+    specificAddress: listing.specificAddress
+  } : null);
+  const rawWa = hostSnapshot?.whatsApp || hostSnapshot?.phone || listing?.hostWhatsApp || listing?.hostPhone || '';
+  const cleanWa = rawWa ? String(rawWa).replace(/[^0-9]/g, '') : '';
+  const whatsappUrl = cleanWa 
+    ? `https://wa.me/${cleanWa}?text=${encodeURIComponent(`Hi ${hostSnapshot?.name || 'Host'}, I have confirmed my booking (${bookingRef}) for "${listing.title}" on Last Dance Accommodations. Looking forward to connecting!`)}`
     : null;
 
   return (

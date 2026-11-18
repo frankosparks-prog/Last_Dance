@@ -2,7 +2,12 @@
 // TextSMS Kenya Gateway Integration
 
 const axios = require('axios');
-require('dotenv').config();
+const path = require('path');
+try {
+    require('dotenv').config({ path: path.join(__dirname, '../.env') });
+} catch (e) {
+    // Ignore if dotenv is loaded globally
+}
 
 const TEXTSMS_API_KEY = process.env.TEXTSMS_API_KEY || '';
 const PARTNER_ID = process.env.PARTNER_ID || '';
@@ -43,7 +48,12 @@ async function sendSms({ phone, message }) {
         return { success: false, error: 'Message body cannot be empty' };
     }
 
-    if (!TEXTSMS_API_KEY || !PARTNER_ID) {
+    const apiKey = process.env.TEXTSMS_API_KEY || TEXTSMS_API_KEY;
+    const partnerId = process.env.PARTNER_ID || PARTNER_ID;
+    const senderId = process.env.SENDER_ID || SENDER_ID || 'TextSMS';
+    const endpoint = process.env.TEXTSMS_ENDPOINT || SMS_ENDPOINT || 'https://sms.textsms.co.ke/api/services/sendsms/';
+
+    if (!apiKey || !partnerId) {
         console.warn('[TextSMS] Credentials missing on server! TEXTSMS_API_KEY or PARTNER_ID is not configured.');
         return { 
             success: false, 
@@ -52,37 +62,42 @@ async function sendSms({ phone, message }) {
     }
 
     try {
-        console.log(`[TextSMS] Dispatching SMS to ${formattedPhone} (Sender: ${SENDER_ID}): "${message.substring(0, 60)}..."`);
+        console.log(`[TextSMS] Dispatching SMS to ${formattedPhone} (Sender: ${senderId}): "${message.substring(0, 60)}..."`);
         
         const payload = {
-            apikey: TEXTSMS_API_KEY,
-            partnerID: PARTNER_ID,
+            apikey: apiKey,
+            partnerID: partnerId,
             message: message.trim(),
-            shortcode: SENDER_ID,
+            shortcode: senderId,
             mobile: formattedPhone
         };
 
-        const response = await axios.post(SMS_ENDPOINT, payload, {
+        const response = await axios.post(endpoint, payload, {
             headers: {
                 'Content-Type': 'application/json',
-                Accept: 'application/json'
+                Accept: 'application/json',
+                'User-Agent': 'LastDancePlatform/1.0 (Mozilla/5.0)'
             },
-            timeout: 10000
+            timeout: 15000
         });
 
-        console.log('[TextSMS] API Response:', response.data);
+        console.log('[TextSMS] API Response:', JSON.stringify(response.data));
         const resData = response.data || {};
         
-        // Handle common response formats from TextSMS / Advanta
+        // Handle common response formats from TextSMS / Advanta (including typo 'respose-code' in upstream API)
         const firstResp = Array.isArray(resData.responses) ? resData.responses[0] : null;
+        const respCode = firstResp ? (firstResp['response-code'] ?? firstResp['respose-code'] ?? firstResp.response_code) : null;
         const isSuccess = 
             resData.response_code === 200 || 
             resData.success === true || 
-            (firstResp && (firstResp['response-code'] === 200 || firstResp.response_code === 200)) ||
+            respCode === 200 ||
+            respCode === '200' ||
             resData.status === 'success';
 
         const gatewayError = 
-            (firstResp && firstResp['response-description'] && firstResp['response-code'] !== 200 ? firstResp['response-description'] : null) ||
+            (firstResp && (firstResp['response-description'] || firstResp['respose-description']) && respCode !== 200 && respCode !== '200' 
+                ? (firstResp['response-description'] || firstResp['respose-description']) 
+                : null) ||
             resData.message || 
             resData.description || 
             (isSuccess ? null : 'Gateway rejected SMS dispatch');
@@ -182,11 +197,13 @@ async function sendGuestAccommodationBookingSms({ booking, listing, frontendUrl 
 
     const siteUrl = frontendUrl || process.env.FRONTEND_URL || 'https://lastdance.co.ke';
     const detailsUrl = `${siteUrl}/last-dance/accommodations/booking/${booking.bookingRef}`;
+    const hostName = booking.hostDetails?.name || listing?.hostName || 'Property Host';
     const hostNumber = booking.hostDetails?.phone || listing?.hostPhone || '';
     const hostWa = booking.hostDetails?.whatsApp || listing?.hostWhatsApp || hostNumber;
-    const cleanWa = hostWa.replace(/[^0-9]/g, '');
+    const cleanWa = hostWa ? String(hostWa).replace(/[^0-9]/g, '') : '';
+    const propTitle = booking.listingTitle || listing?.title || 'Property';
 
-    const message = `Confirmed! Accommodation booking for "${booking.listingTitle}" (Ref: ${booking.bookingRef}). KES ${booking.connectionFeeKES || 100} paid. Host: ${booking.hostDetails?.name || listing?.hostName || 'Host'} (${hostNumber}). WhatsApp: https://wa.me/${cleanWa} View details: ${detailsUrl}`;
+    const message = `Confirmed! Accommodation booking for "${propTitle}" (Ref: ${booking.bookingRef}). Host: ${hostName} (${hostNumber}). WhatsApp: https://wa.me/${cleanWa} Stay Pass: ${detailsUrl}`;
 
     return sendSms({
         phone: booking.guestPhone,
@@ -201,7 +218,9 @@ async function sendHostAccommodationBookedSms({ booking, listing }) {
     const hostPhone = listing?.hostPhone || booking?.hostDetails?.phone;
     if (!hostPhone) return { success: false, error: 'Missing hostPhone' };
 
-    const message = `Great news ${listing?.hostName || 'Host'}! Your house "${booking.listingTitle}" (Ref: ${listing?.listingRef || booking.bookingRef}) has been booked by ${booking.guestName} (${booking.guestPhone}) for ${booking.checkInDate} (${booking.guestCount} guest(s)). Please contact them to coordinate check-in!`;
+    const hostName = listing?.hostName || booking?.hostDetails?.name || 'Host';
+    const propTitle = booking.listingTitle || listing?.title || 'Property';
+    const message = `Hello ${hostName}! Your property "${propTitle}" has been booked by ${booking.guestName} (${booking.guestPhone}) for ${booking.checkInDate} (${booking.guestCount || 1} guest(s)). Ref: ${booking.bookingRef}. Please reach out to coordinate arrival & keys.`;
 
     return sendSms({
         phone: hostPhone,

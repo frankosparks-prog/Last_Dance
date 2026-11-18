@@ -1128,13 +1128,15 @@ exports.handlePaymentCallback = async (req, res) => {
             // Dispatch Guest SMS
             try {
                 const { sendGuestAccommodationBookingSms, sendHostAccommodationBookedSms } = require('../services/smsService');
-                await sendGuestAccommodationBookingSms({ booking: accBooking, listing: listingDoc });
-                accBooking.guestSmsSent = true;
+                const guestSmsRes = await sendGuestAccommodationBookingSms({ booking: accBooking, listing: listingDoc });
+                console.log('[Callback] Guest booking SMS result:', guestSmsRes);
+                accBooking.guestSmsSent = guestSmsRes?.success || false;
 
                 // Dispatch Host SMS
                 if (listingDoc) {
-                    await sendHostAccommodationBookedSms({ booking: accBooking, listing: listingDoc });
-                    accBooking.hostSmsSent = true;
+                    const hostSmsRes = await sendHostAccommodationBookedSms({ booking: accBooking, listing: listingDoc });
+                    console.log('[Callback] Host booking SMS result:', hostSmsRes);
+                    accBooking.hostSmsSent = hostSmsRes?.success || false;
                 }
                 await accBooking.save();
             } catch (smsErr) {

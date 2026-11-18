@@ -612,7 +612,7 @@ exports.bookAccommodation = async (req, res) => {
             listingZone: listing.locationZone,
             guestName: guestName.trim(),
             guestPhone: cleanGuestPhone,
-            guestEmail: guestEmail.trim().toLowerCase(),
+            guestEmail: guestEmail ? guestEmail.trim().toLowerCase() : '',
             guestCount: Number(guestCount) || 1,
             checkInDate,
             checkOutDate: checkOutDate || '2026-10-27',
@@ -621,7 +621,13 @@ exports.bookAccommodation = async (req, res) => {
             connectionFeeKES: connectionFee,
             checkoutRequestID: stkResult.CheckoutRequestID,
             paymentStatus: 'pending',
-            status: 'pending_payment'
+            status: 'pending_payment',
+            hostDetails: {
+                name: listing.hostName,
+                phone: listing.hostPhone,
+                whatsApp: listing.hostWhatsApp || listing.hostPhone,
+                specificAddress: listing.specificAddress
+            }
         });
 
         res.json({
@@ -703,11 +709,13 @@ exports.checkBookingStatus = async (req, res) => {
 
                 // Send SMS notifications
                 try {
-                    await sendGuestAccommodationBookingSms({ booking, listing });
-                    booking.guestSmsSent = true;
+                    const guestSmsRes = await sendGuestAccommodationBookingSms({ booking, listing });
+                    console.log('[Accommodations] Guest booking SMS result:', guestSmsRes);
+                    booking.guestSmsSent = guestSmsRes?.success || false;
                     if (listing) {
-                        await sendHostAccommodationBookedSms({ booking, listing });
-                        booking.hostSmsSent = true;
+                        const hostSmsRes = await sendHostAccommodationBookedSms({ booking, listing });
+                        console.log('[Accommodations] Host booking SMS result:', hostSmsRes);
+                        booking.hostSmsSent = hostSmsRes?.success || false;
                     }
                     await booking.save();
                 } catch (smsErr) {
@@ -774,6 +782,29 @@ exports.getBookingByRef = async (req, res) => {
 
         if (!isPaid) {
             delete responseData.hostDetails;
+            delete responseData.hostSnapshot;
+            if (responseData.listing) {
+                delete responseData.listing.hostPhone;
+                delete responseData.listing.hostWhatsApp;
+                delete responseData.listing.specificAddress;
+            }
+        } else {
+            // BACKFILL & RESILIENCE: If hostDetails is missing on the booking record, backfill from listing
+            const listing = booking.listing;
+            if (!responseData.hostDetails || !responseData.hostDetails.phone) {
+                if (listing) {
+                    responseData.hostDetails = {
+                        name: listing.hostName || '',
+                        phone: listing.hostPhone || '',
+                        whatsApp: listing.hostWhatsApp || listing.hostPhone || '',
+                        specificAddress: listing.specificAddress || ''
+                    };
+                    booking.hostDetails = responseData.hostDetails;
+                    await booking.save().catch(e => console.error('[Accommodations] Backfill hostDetails error:', e.message));
+                }
+            }
+            // Ensure hostSnapshot alias is present for complete frontend compatibility
+            responseData.hostSnapshot = responseData.hostDetails;
         }
 
         res.json({
@@ -820,7 +851,7 @@ exports.getMyAccommodationsByPhone = async (req, res) => {
    ========================================================================== */
 
 /**
- * 11. Admin: Get all Accommodation Listings (with host contacts & filter by status)
+ * 11. Admin: Get all Accommodation Listings (with host contacts, filter by status, and booked guest info)
  */
 exports.adminGetListings = async (req, res) => {
     try {
@@ -830,10 +861,68 @@ exports.adminGetListings = async (req, res) => {
         if (status && status !== 'All') query.status = status;
         if (zone && zone !== 'All') query.locationZone = zone;
 
-        const listings = await AccommodationListing.find(query).sort({ createdAt: -1 });
-        res.json({ success: true, count: listings.length, listings });
+        const listings = await AccommodationListing.find(query).sort({ createdAt: -1 }).lean();
+        const listingIds = listings.map(l => l._id);
+
+        // Fetch associated bookings for these listings
+        const bookings = await AccommodationBooking.find({
+            listing: { $in: listingIds }
+        }).sort({ createdAt: -1 }).lean();
+
+        const bookingsMap = {};
+        bookings.forEach(b => {
+            const key = b.listing.toString();
+            // Prioritize completed booking, else keep latest
+            if (!bookingsMap[key] || (b.paymentStatus === 'completed' && bookingsMap[key].paymentStatus !== 'completed')) {
+                bookingsMap[key] = b;
+            }
+        });
+
+        const listingsWithBookings = listings.map(l => ({
+            ...l,
+            booking: bookingsMap[l._id.toString()] || null
+        }));
+
+        res.json({ success: true, count: listingsWithBookings.length, listings: listingsWithBookings });
     } catch (err) {
         console.error('[Accommodations Admin] adminGetListings error:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+/**
+ * 11c. Admin: Get all Accommodation Bookings / Reservations (with guest info & host contacts)
+ */
+exports.adminGetBookings = async (req, res) => {
+    try {
+        const { status, search } = req.query;
+        const query = {};
+        if (status && status !== 'all' && status !== 'All') {
+            query.paymentStatus = status;
+        }
+        if (search && search.trim()) {
+            const s = search.trim();
+            query.$or = [
+                { bookingRef: { $regex: s, $options: 'i' } },
+                { guestName: { $regex: s, $options: 'i' } },
+                { guestPhone: { $regex: s, $options: 'i' } },
+                { guestEmail: { $regex: s, $options: 'i' } },
+                { listingTitle: { $regex: s, $options: 'i' } },
+                { mpesaReceiptNumber: { $regex: s, $options: 'i' } }
+            ];
+        }
+
+        const bookings = await AccommodationBooking.find(query)
+            .populate('listing')
+            .sort({ createdAt: -1 });
+
+        res.json({
+            success: true,
+            count: bookings.length,
+            bookings
+        });
+    } catch (err) {
+        console.error('[Accommodations Admin] adminGetBookings error:', err);
         res.status(500).json({ success: false, message: err.message });
     }
 };
@@ -1001,18 +1090,23 @@ exports.adminGetTransactions = async (req, res) => {
         const transactions = [];
 
         // Map Host Enlisting Payments
-        if (!type || type === 'All' || type === 'host_enlisting') {
+        if (!type || type === 'All' || type === 'all' || type === 'host_enlisting' || type === 'host_enlisting_fee') {
             hostListings.forEach(l => {
                 transactions.push({
                     id: l._id,
                     type: 'host_enlisting',
+                    transactionType: 'host_enlisting_fee',
                     typeLabel: 'Host Enlisting Fee',
                     reference: l.listingRef,
                     itemTitle: l.title,
+                    targetTitle: l.title,
                     payerName: l.hostName,
+                    userName: l.hostName,
                     payerPhone: l.hostPhone,
-                    amountKES: l.enlistingFeeKES || 100,
+                    phone: l.hostPhone,
+                    amountKES: l.enlistingFeeKES ?? 100,
                     receiptNumber: l.enlistingReceiptNumber || '-',
+                    mpesaReceipt: l.enlistingReceiptNumber || '-',
                     status: l.enlistingPaymentStatus,
                     checkoutRequestID: l.enlistingCheckoutRequestID,
                     createdAt: l.enlistingPaidAt || l.createdAt,
@@ -1022,18 +1116,23 @@ exports.adminGetTransactions = async (req, res) => {
         }
 
         // Map Guest Connection Payments
-        if (!type || type === 'All' || type === 'guest_booking') {
+        if (!type || type === 'All' || type === 'all' || type === 'guest_booking' || type === 'guest_connection_fee') {
             guestBookings.forEach(b => {
                 transactions.push({
                     id: b._id,
                     type: 'guest_booking',
+                    transactionType: 'guest_connection_fee',
                     typeLabel: 'Guest Connection Fee',
                     reference: b.bookingRef,
                     itemTitle: b.listingTitle,
+                    targetTitle: b.listingTitle,
                     payerName: b.guestName,
+                    userName: b.guestName,
                     payerPhone: b.guestPhone,
+                    phone: b.guestPhone,
                     amountKES: b.connectionFeeKES || 100,
                     receiptNumber: b.mpesaReceiptNumber || '-',
+                    mpesaReceipt: b.mpesaReceiptNumber || '-',
                     status: b.paymentStatus,
                     checkoutRequestID: b.checkoutRequestID,
                     createdAt: b.paidAt || b.createdAt,
@@ -1048,7 +1147,8 @@ exports.adminGetTransactions = async (req, res) => {
         res.json({
             success: true,
             count: transactions.length,
-            transactions
+            transactions,
+            ledger: transactions
         });
     } catch (err) {
         console.error('[Accommodations Admin] adminGetTransactions error:', err);
