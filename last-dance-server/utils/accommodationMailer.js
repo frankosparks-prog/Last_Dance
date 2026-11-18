@@ -157,10 +157,18 @@ function generateGuestBookingHtml({ booking, listing, frontendUrl }) {
 
 /**
  * Dispatch Guest Accommodation Confirmation Email via Brevo
+ * STRICT SECURITY: Only fires if booking paymentStatus === 'completed' and receipt is present
  */
 async function sendGuestAccommodationEmail({ booking, listing, frontendUrl }) {
     if (!booking || !booking.guestEmail) {
         throw new Error("sendGuestAccommodationEmail: 'booking' with 'guestEmail' is required");
+    }
+
+    // STRICT GUARD: Guarantee no email containing host details is ever sent to unpaid bookings
+    const isPaid = booking.paymentStatus === 'completed' && Boolean(booking.mpesaReceiptNumber);
+    if (!isPaid) {
+        console.warn(`[MAILER SECURITY] Refused to dispatch guest booking email for unpaid booking (Ref: ${booking.bookingRef}, Status: ${booking.paymentStatus}).`);
+        return { success: false, error: 'Cannot send host details email for unpaid booking' };
     }
 
     const subject = `Accommodation Booking Confirmed: ${booking.listingTitle} [Ref: ${booking.bookingRef}]`;

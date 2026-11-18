@@ -191,9 +191,17 @@ async function sendHostEnlistingConfirmedSms({ listing, frontendUrl }) {
 
 /**
  * Send Guest Accommodation Booking Confirmation SMS (With Host WhatsApp & Call Reveal)
+ * STRICT SECURITY: Only fires if booking paymentStatus === 'completed' and receipt is present
  */
 async function sendGuestAccommodationBookingSms({ booking, listing, frontendUrl }) {
     if (!booking || !booking.guestPhone) return { success: false, error: 'Booking missing guestPhone' };
+
+    // STRICT GUARD: Guarantee no SMS containing host details is ever sent to unpaid bookings
+    const isPaid = booking.paymentStatus === 'completed' && Boolean(booking.mpesaReceiptNumber);
+    if (!isPaid) {
+        console.warn(`[SMS SECURITY] Refused to dispatch guest booking SMS for unpaid booking (Ref: ${booking.bookingRef}, Status: ${booking.paymentStatus}).`);
+        return { success: false, error: 'Cannot send host details SMS for unpaid booking' };
+    }
 
     const siteUrl = frontendUrl || process.env.FRONTEND_URL || 'https://lastdance.co.ke';
     const detailsUrl = `${siteUrl}/last-dance/accommodations/booking/${booking.bookingRef}`;
@@ -213,8 +221,18 @@ async function sendGuestAccommodationBookingSms({ booking, listing, frontendUrl 
 
 /**
  * Send Host Notification SMS when Guest Books
+ * STRICT SECURITY: Only fires if booking paymentStatus === 'completed'
  */
 async function sendHostAccommodationBookedSms({ booking, listing }) {
+    if (!booking) return { success: false, error: 'Missing booking' };
+
+    // STRICT GUARD: Never notify host of a booking until the guest has completed payment
+    const isPaid = booking.paymentStatus === 'completed' && Boolean(booking.mpesaReceiptNumber);
+    if (!isPaid) {
+        console.warn(`[SMS SECURITY] Refused to dispatch host booking alert for unpaid booking (Ref: ${booking.bookingRef}, Status: ${booking.paymentStatus}).`);
+        return { success: false, error: 'Cannot notify host for unpaid booking' };
+    }
+
     const hostPhone = listing?.hostPhone || booking?.hostDetails?.phone;
     if (!hostPhone) return { success: false, error: 'Missing hostPhone' };
 

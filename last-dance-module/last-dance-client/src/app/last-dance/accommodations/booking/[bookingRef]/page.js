@@ -103,17 +103,16 @@ export default function AccommodationBookingDetailsPage() {
 
   const isCompleted = booking.paymentStatus === 'completed';
   const listing = booking.listing || {};
-  const host = booking.hostDetails || booking.hostSnapshot || (listing ? {
-    name: listing.hostName,
-    phone: listing.hostPhone,
-    whatsApp: listing.hostWhatsApp || listing.hostPhone,
-    specificAddress: listing.specificAddress
-  } : {});
+  
+  // Strictly reveal host contact ONLY if booking payment is completed
+  const host = isCompleted
+    ? (booking.hostDetails || booking.hostSnapshot || {})
+    : {};
   const rules = listing.houseRules || {};
 
-  const rawWa = host?.whatsApp || host?.phone || listing?.hostWhatsApp || listing?.hostPhone || '';
+  const rawWa = isCompleted ? (host?.whatsApp || host?.phone || '') : '';
   const cleanWhatsApp = rawWa ? String(rawWa).replace(/[^0-9]/g, '') : '';
-  const whatsappUrl = cleanWhatsApp
+  const whatsappUrl = (isCompleted && cleanWhatsApp)
     ? `https://wa.me/${cleanWhatsApp}?text=${encodeURIComponent(`Hi ${host?.name || 'Host'}, I have confirmed booking ${booking.bookingRef} for "${listing?.title || 'your property'}" on Last Dance Accommodations. Connecting regarding check-in & directions.`)}`
     : null;
 
@@ -187,95 +186,141 @@ export default function AccommodationBookingDetailsPage() {
             </div>
           </div>
 
-          {/* Unlocked Host Contact Section (Crucial Middleman Reveal) */}
+          {/* Host Contact Section: Unlocked (Paid) vs Locked (Pending / Unpaid) */}
           <div className="p-6 sm:p-8 space-y-6">
-            <div className="rounded-2xl border-2 border-emerald-500/30 bg-emerald-50/50 p-5 sm:p-6 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-500/20">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center">
-                    <UserCheck className="w-5 h-5" />
+            {isCompleted ? (
+              <div className="rounded-2xl border-2 border-emerald-500/30 bg-emerald-50/50 p-5 sm:p-6 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-500/20">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center">
+                      <UserCheck className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-[16px] font-bold text-emerald-950">
+                        Unlocked Host Contact &amp; Location
+                      </h3>
+                      <p className="text-[12px] text-emerald-800">
+                        Connect directly with the host to coordinate arrival and keys
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-[16px] font-bold text-emerald-950">
-                      Unlocked Host Contact &amp; Location
-                    </h3>
-                    <p className="text-[12px] text-emerald-800">
-                      Connect directly with the host to coordinate arrival and keys
-                    </p>
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-2 flex-wrap shrink-0">
-                  {whatsappUrl && (
-                    <a
-                      href={whatsappUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[13px] font-medium transition shadow-sm shrink-0"
-                    >
-                      <MessageSquare className="w-4 h-4" />
-                      <span>Chat on WhatsApp</span>
-                      <ExternalLink className="w-3.5 h-3.5 opacity-80" />
-                    </a>
-                  )}
-
-                  {host.phone && (
-                    <a
-                      href={`tel:${host.phone}`}
-                      className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full bg-white hover:bg-emerald-100 text-emerald-950 border border-emerald-300 text-[13px] font-medium transition shadow-2xs shrink-0"
-                    >
-                      <Phone className="w-4 h-4 text-emerald-700" />
-                      <span>Call Host</span>
-                    </a>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[13px]">
-                <div className="space-y-1">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Host Name</p>
-                  <p className="font-bold text-black text-[15px]">{host.name || 'Verified Property Host'}</p>
-                </div>
-
-                <div className="space-y-1">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Calling Handset</p>
-                  <p className="font-bold text-black text-[15px] flex items-center gap-1.5">
-                    <Phone className="w-4 h-4 text-emerald-700" />
-                    {host.phone ? (
-                      <a href={`tel:${host.phone}`} className="hover:underline text-emerald-950 font-bold">{host.phone}</a>
-                    ) : (
-                      <span className="text-black/60 font-medium">Provided via SMS</span>
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
+                    {whatsappUrl && (
+                      <a
+                        href={whatsappUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[13px] font-medium transition shadow-sm shrink-0"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        <span>Chat on WhatsApp</span>
+                        <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+                      </a>
                     )}
-                  </p>
+
+                    {host.phone && (
+                      <a
+                        href={`tel:${host.phone}`}
+                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full bg-white hover:bg-emerald-100 text-emerald-950 border border-emerald-300 text-[13px] font-medium transition shadow-2xs shrink-0"
+                      >
+                        <Phone className="w-4 h-4 text-emerald-700" />
+                        <span>Call Host</span>
+                      </a>
+                    )}
+                  </div>
                 </div>
 
-                {(host.whatsApp || whatsappUrl) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[13px]">
                   <div className="space-y-1">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">WhatsApp Number</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Host Name</p>
+                    <p className="font-bold text-black text-[15px]">{host.name || 'Verified Property Host'}</p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Calling Handset</p>
                     <p className="font-bold text-black text-[15px] flex items-center gap-1.5">
-                      <MessageSquare className="w-4 h-4 text-emerald-700" />
-                      {whatsappUrl ? (
-                        <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="hover:underline text-emerald-950 font-bold">
-                          {host.whatsApp || host.phone}
-                        </a>
+                      <Phone className="w-4 h-4 text-emerald-700" />
+                      {host.phone ? (
+                        <a href={`tel:${host.phone}`} className="hover:underline text-emerald-950 font-bold">{host.phone}</a>
                       ) : (
-                        <span>{host.whatsApp || host.phone}</span>
+                        <span className="text-black/60 font-medium">Provided via SMS</span>
                       )}
                     </p>
                   </div>
-                )}
 
-                <div className="sm:col-span-2 space-y-1 pt-1">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>Exact Specific Address &amp; Landmarks</span>
-                  </p>
-                  <p className="text-black/85 text-[14px] bg-white p-3 rounded-xl border border-emerald-200/80 leading-relaxed font-medium">
-                    {host.specificAddress || listing.specificAddress || `Zone: ${listing.locationZone}`}
-                  </p>
+                  {(host.whatsApp || whatsappUrl) && (
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">WhatsApp Number</p>
+                      <p className="font-bold text-black text-[15px] flex items-center gap-1.5">
+                        <MessageSquare className="w-4 h-4 text-emerald-700" />
+                        {whatsappUrl ? (
+                          <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="hover:underline text-emerald-950 font-bold">
+                            {host.whatsApp || host.phone}
+                          </a>
+                        ) : (
+                          <span>{host.whatsApp || host.phone}</span>
+                        )}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="sm:col-span-2 space-y-1 pt-1">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>Exact Specific Address &amp; Landmarks</span>
+                    </p>
+                    <p className="text-black/85 text-[14px] bg-white p-3 rounded-xl border border-emerald-200/80 leading-relaxed font-medium">
+                      {host.specificAddress || listing.specificAddress || `Zone: ${listing.locationZone}`}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-2xl border-2 border-amber-300 bg-amber-50/70 p-6 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-200">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-[16px] font-bold text-amber-950">
+                        Host Contact &amp; Exact Location Locked
+                      </h3>
+                      <p className="text-[12px] text-amber-800">
+                        Awaiting confirmed KES 100 connection fee payment to reveal host credentials
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-200 text-amber-900 self-start sm:self-auto">
+                    Payment Required
+                  </span>
+                </div>
+
+                <p className="text-[13px] text-amber-900 leading-relaxed">
+                  To protect property hosts from unsolicited inquiries and ensure verified student reservations, direct calling numbers, WhatsApp messaging links, and specific house landmarks are unlocked only after successful payment confirmation.
+                </p>
+
+                <div className="pt-1 flex flex-col sm:flex-row gap-2.5">
+                  <Link
+                    href="/last-dance/accommodations"
+                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-[#5e2590] hover:bg-[#762e99] text-white text-[13px] font-medium transition shadow-sm"
+                  >
+                    <span>Back to Accommodations</span>
+                    <ArrowLeft className="w-4 h-4 rotate-180" />
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={fetchBooking}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full border border-amber-300 bg-white hover:bg-amber-100 text-amber-900 text-[13px] font-medium transition shadow-2xs"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Check Payment Status</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Property Stay Details */}
             <div className="rounded-2xl border border-black/[0.08] bg-[#f7f7f7] p-5 sm:p-6 space-y-4">

@@ -622,13 +622,13 @@ exports.bookAccommodation = async (req, res) => {
             checkoutRequestID: stkResult.CheckoutRequestID,
             paymentStatus: 'pending',
             status: 'pending_payment',
-            hostDetails: {
-                name: listing.hostName,
-                phone: listing.hostPhone,
-                whatsApp: listing.hostWhatsApp || listing.hostPhone,
-                specificAddress: listing.specificAddress
-            }
+            hostDetails: {} // STRICT SECURITY: Do not store host contact credentials on unpaid booking
         });
+
+        // STRICT SECURITY: Strip any host details from the booking response payload
+        const sanitizedBooking = booking.toObject();
+        delete sanitizedBooking.hostDetails;
+        delete sanitizedBooking.hostSnapshot;
 
         res.json({
             success: true,
@@ -636,7 +636,7 @@ exports.bookAccommodation = async (req, res) => {
             bookingRef,
             checkoutRequestID: stkResult.CheckoutRequestID,
             connectionFeeKES: connectionFee,
-            booking
+            booking: sanitizedBooking
         });
     } catch (err) {
         console.error('[Accommodations] bookAccommodation error:', err);
@@ -679,11 +679,20 @@ exports.checkBookingStatus = async (req, res) => {
             }
 
             if (confirmedTx && confirmedTx.pending) {
+                const pendingBooking = booking.toObject();
+                delete pendingBooking.hostDetails;
+                delete pendingBooking.hostSnapshot;
+                if (pendingBooking.listing) {
+                    delete pendingBooking.listing.hostName;
+                    delete pendingBooking.listing.hostPhone;
+                    delete pendingBooking.listing.hostWhatsApp;
+                    delete pendingBooking.listing.specificAddress;
+                }
                 return res.json({
                     success: true,
                     status: 'pending',
                     message: 'Awaiting M-Pesa PIN confirmation on guest handset.',
-                    booking
+                    booking: pendingBooking
                 });
             }
 
@@ -752,10 +761,22 @@ exports.checkBookingStatus = async (req, res) => {
             // Non-blocking query error
         }
 
+        const fallbackBooking = booking.toObject();
+        if (booking.paymentStatus !== 'completed') {
+            delete fallbackBooking.hostDetails;
+            delete fallbackBooking.hostSnapshot;
+            if (fallbackBooking.listing) {
+                delete fallbackBooking.listing.hostName;
+                delete fallbackBooking.listing.hostPhone;
+                delete fallbackBooking.listing.hostWhatsApp;
+                delete fallbackBooking.listing.specificAddress;
+            }
+        }
+
         res.json({
             success: true,
             status: booking.paymentStatus,
-            booking
+            booking: fallbackBooking
         });
     } catch (err) {
         console.error('[Accommodations] checkBookingStatus error:', err);
@@ -784,6 +805,7 @@ exports.getBookingByRef = async (req, res) => {
             delete responseData.hostDetails;
             delete responseData.hostSnapshot;
             if (responseData.listing) {
+                delete responseData.listing.hostName;
                 delete responseData.listing.hostPhone;
                 delete responseData.listing.hostWhatsApp;
                 delete responseData.listing.specificAddress;
@@ -834,9 +856,22 @@ exports.getMyAccommodationsByPhone = async (req, res) => {
             AccommodationListing.find({ hostPhone: cleanPhone }).sort({ createdAt: -1 })
         ]);
 
+        // STRICT SECURITY SANITIZATION:
+        // Any booking that is NOT completed must NEVER leak hostDetails or host contact info
+        const sanitizedGuestBookings = guestBookings.map(b => {
+            const obj = b.toObject();
+            if (obj.paymentStatus !== 'completed') {
+                delete obj.hostDetails;
+                delete obj.hostSnapshot;
+            }
+            return obj;
+        });
+
         res.json({
             success: true,
-            guestBookings,
+            bookings: sanitizedGuestBookings,
+            listings: hostListings,
+            guestBookings: sanitizedGuestBookings,
             hostListings
         });
     } catch (err) {

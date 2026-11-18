@@ -129,6 +129,7 @@ import { usePathname } from 'next/navigation';
 import Navbar from '../../components/last-dance/Navbar';
 import Footer from '../../components/last-dance/Footer';
 import TicketModal from '../../components/last-dance/TicketModal';
+import FloatingHostPromo from '../../components/last-dance/FloatingHostPromo';
 
 export default function LastDanceLayout({ children }) {
   const pathname = usePathname();
@@ -335,6 +336,11 @@ export default function LastDanceLayout({ children }) {
           }
         />
       )}
+
+      {/* =========================================
+          FLOATING HOST ENLISTING PROMO WIDGET
+      ========================================== */}
+      <FloatingHostPromo />
     </div>
   );
 }

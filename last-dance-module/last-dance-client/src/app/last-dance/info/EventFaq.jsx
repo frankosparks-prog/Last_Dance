@@ -36,6 +36,14 @@ const FAQS = [
     answer:
       'The dress code is red carpet and elegant eveningwear. Come ready for the gala, photography and the full Graduation Eve experience.',
   },
+
+  {
+    question:
+      'How does campus accommodation enlisting work for hosts?',
+
+    answer:
+      'Property owners, hostel landlords, and campus students with spare rooms can enlist directly on our Accommodations Marketplace. We are currently offering 100% free enlisting for the first 20 hosts! To verify and publish your room, simply DM or call 0708270176 on WhatsApp.',
+  },
 ];
 
 export default function EventFaq() {
